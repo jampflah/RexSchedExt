@@ -37,6 +37,25 @@ impl TaskStruct {
         }
     }
 
+    /// Construct a TaskStruct from a raw kernel pointer.
+    ///
+    /// # Safety
+    /// The caller must ensure `ptr` is a valid, non-null task_struct
+    /// pointer that outlives the returned TaskStruct.
+    #[inline(always)]
+    pub(crate) unsafe fn from_raw(ptr: *mut task_struct) -> Self {
+        TaskStruct {
+            task: unsafe { &*ptr },
+            kptr: ptr,
+        }
+    }
+
+    /// Return the underlying raw pointer for passing to kernel helpers.
+    #[inline(always)]
+    pub fn as_ptr(&self) -> *mut task_struct {
+        self.kptr
+    }
+
     #[inline(always)]
     pub fn get_pid(&self) -> i32 {
         self.task.pid

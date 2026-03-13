@@ -43,6 +43,7 @@ kheaders = [
   "linux/perf_event.h",
   "linux/prandom.h",
   "linux/sched.h",
+  "linux/sched/ext.h",
   "linux/seqlock.h",
   "linux/skbuff.h",
   "linux/tcp.h",
@@ -51,4 +52,4 @@ kheaders = [
   "net/xdp.h",
 ]
 
-kconfigs = ["CONFIG_BPF_KPROBE_OVERRIDE", "CONFIG_KALLSYMS_ALL"]
+kconfigs = ["CONFIG_BPF_KPROBE_OVERRIDE", "CONFIG_KALLSYMS_ALL", "CONFIG_SCHED_CLASS_EXT"]

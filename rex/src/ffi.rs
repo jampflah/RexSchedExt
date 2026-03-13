@@ -239,6 +239,55 @@ unsafe extern "C" {
 
     /// __bpf_kfunc void bpf_task_release(struct task_struct *p)
     pub(crate) fn bpf_task_release(task: *mut task_struct);
+
+    // ---------------------------------------------------------------
+    //  sched_ext kfuncs (kernel/sched/ext.c)
+    //  Resolved at load time via dynamic symbol resolution.
+    // ---------------------------------------------------------------
+
+    /// void scx_bpf_dsq_insert(struct task_struct *p, u64 dsq_id,
+    ///                          u64 slice, u64 enq_flags)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_dsq_insert(
+        p: *mut task_struct,
+        dsq_id: u64,
+        slice: u64,
+        enq_flags: u64,
+    );
+
+    /// s32 scx_bpf_select_cpu_dfl(struct task_struct *p, s32 prev_cpu,
+    ///                             u64 wake_flags, bool *is_idle)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_select_cpu_dfl(
+        p: *mut task_struct,
+        prev_cpu: i32,
+        wake_flags: u64,
+        is_idle: *mut bool,
+    ) -> i32;
+
+    /// bool scx_bpf_consume(u64 dsq_id)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_consume(dsq_id: u64) -> bool;
+
+    /// void scx_bpf_kick_cpu(s32 cpu, u64 flags)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_kick_cpu(cpu: i32, flags: u64);
+
+    /// s32 scx_bpf_create_dsq(u64 dsq_id, s32 node)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_create_dsq(dsq_id: u64, node: i32) -> i64;
+
+    /// void scx_bpf_destroy_dsq(u64 dsq_id)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_destroy_dsq(dsq_id: u64);
+
+    /// s32 scx_bpf_task_cpu(struct task_struct *p)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_task_cpu(p: *mut task_struct) -> i32;
+
+    /// void scx_bpf_error(const char *msg, u32 len)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_error(msg: *const u8, len: u32);
 }
 
 // Global variables

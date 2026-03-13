@@ -16,7 +16,9 @@ k_structs = ['task_struct', 'tk_read_base', 'seqcount_raw_spinlock_t',
              'kcsan_ctx', 'rnd_state', 'timespec64', 'bpf_spin_lock',
              'bpf_sysctl_kern', 'xdp_buff', 'ethhdr', 'iphdr', 'tcphdr',
              'udphdr', 'sk_buff', 'sock', 'pcpu_hot',
-             'bpf_perf_event_data_kern']
+             'bpf_perf_event_data_kern',
+             'sched_ext_ops', 'scx_exit_info',
+             'scx_init_task_args', 'scx_exit_task_args']
 
 bindgen_kernel_cmd = '''bindgen %s --allowlist-type="%s"
 --allowlist-var="(___GFP.*|CONFIG_.*|MAX_BPRINTF_BUF)"

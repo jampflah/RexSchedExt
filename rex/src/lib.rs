@@ -13,6 +13,8 @@ pub mod map;
 pub mod perf_event;
 pub mod pt_regs;
 pub mod sched_cls;
+#[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+pub mod sched_ext;
 pub mod spinlock;
 pub mod task_struct;
 pub mod tracepoint;

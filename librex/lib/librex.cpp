@@ -231,6 +231,16 @@ public:
   friend struct ::rex_obj;
 };
 
+/// Metadata for a sched_ext struct_ops definition parsed from ELF
+struct rex_struct_ops {
+  std::string name;
+  Elf64_Off offset;
+  uint64_t size;
+
+  rex_struct_ops(const char *nm, Elf64_Off off, uint64_t sz)
+      : name(nm), offset(off), size(sz) {}
+};
+
 struct rex_obj {
 private:
   struct elf_del {
@@ -258,6 +268,7 @@ private:
 
   std::vector<rex_prog> progs;
   std::unordered_map<Elf64_Off, rex_map> map_defs;
+  std::vector<rex_struct_ops> struct_ops_defs;
 
   std::unique_ptr<Elf, elf_del> elf;
   Elf_Scn *symtab_scn;
@@ -281,9 +292,12 @@ private:
   std::string basename;
   std::unique_ptr<bpf_object, bpf_obj_del> bpf_obj_ptr;
 
+  Elf_Scn *struct_ops_scn;
+
   int parse_scns();
   int parse_maps();
   int parse_progs();
+  int parse_struct_ops();
   int parse_got();
   int parse_rela_dyn();
 
@@ -305,7 +319,7 @@ public:
 
 rex_obj::rex_obj(const char *c_path)
     : map_defs(), symtab_scn(nullptr), dynsym_scn(nullptr), maps_scn(nullptr),
-      prog_fd(-1), loaded(false) {
+      struct_ops_scn(nullptr), prog_fd(-1), loaded(false) {
   struct stat st;
   void *mmap_ret;
   int fd = open(c_path, 0, O_RDONLY);
@@ -373,12 +387,17 @@ int rex_obj::parse_scns() {
       this->dynsym_scn = scn;
     else if (!strcmp(".maps", name))
       this->maps_scn = scn;
+    else if (!strcmp(".struct_ops", name))
+      this->struct_ops_scn = scn;
     else if (sh->sh_type == SHT_RELA && !strcmp(".rela.dyn", name))
       this->rela_dyn_scn = scn;
   }
 
   if (!this->maps_scn && debug)
     std::clog << "section .maps not found" << std::endl;
+
+  if (!this->struct_ops_scn && debug)
+    std::clog << "section .struct_ops not found" << std::endl;
 
   if (!this->rela_dyn_scn && debug)
     std::clog << "section .rela.dyn not found" << std::endl;
@@ -588,6 +607,52 @@ int rex_obj::parse_rela_dyn() {
   return 0;
 }
 
+int rex_obj::parse_struct_ops() {
+  Elf_Data *data, *syms;
+  int nr_syms;
+  size_t strtabidx;
+  int struct_ops_shndx;
+
+  if (!this->struct_ops_scn)
+    return 0;
+
+  data = elf_getdata(struct_ops_scn, 0);
+  syms = elf_getdata(symtab_scn, 0);
+
+  if (!syms || !data) {
+    std::cerr << "elf: failed to get .struct_ops data" << std::endl;
+    return -1;
+  }
+
+  strtabidx = elf64_getshdr(symtab_scn)->sh_link;
+  struct_ops_shndx = elf_ndxscn(struct_ops_scn);
+  nr_syms = syms->d_size / sizeof(Elf64_Sym);
+
+  for (int i = 0; i < nr_syms; i++) {
+    Elf64_Sym *sym = reinterpret_cast<Elf64_Sym *>(syms->d_buf) + i;
+
+    if (sym->st_shndx != struct_ops_shndx ||
+        ELF64_ST_TYPE(sym->st_info) != STT_OBJECT)
+      continue;
+
+    char *name = elf_strptr(elf.get(), strtabidx, sym->st_name);
+
+    if (debug) {
+      std::clog << "struct_ops: " << name << ", st_value=0x" << std::hex
+                << sym->st_value << ", st_size=" << std::dec << sym->st_size
+                << std::endl;
+    }
+
+    struct_ops_defs.emplace_back(name, sym->st_value, sym->st_size);
+  }
+
+  if (debug)
+    std::clog << "# of struct_ops definitions: " << struct_ops_defs.size()
+              << std::endl;
+
+  return 0;
+}
+
 int rex_obj::parse_elf() {
   int ret;
 
@@ -599,6 +664,7 @@ int rex_obj::parse_elf() {
   ret = this->parse_scns();
   ret = ret < 0 ? ret : this->parse_maps();
   ret = ret < 0 ? ret : this->parse_progs();
+  ret = ret < 0 ? ret : this->parse_struct_ops();
   ret = ret < 0 ? ret : this->parse_rela_dyn();
 
   return ret;
