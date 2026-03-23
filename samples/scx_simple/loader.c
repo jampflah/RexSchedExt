@@ -13,6 +13,7 @@ static volatile int running = 1;
 static void sighandler(int sig)
 {
 	running = 0;
+	printf("%d", sig);
 }
 
 int main(void)

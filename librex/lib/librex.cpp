@@ -319,7 +319,7 @@ public:
 
 rex_obj::rex_obj(const char *c_path)
     : map_defs(), symtab_scn(nullptr), dynsym_scn(nullptr), maps_scn(nullptr),
-      struct_ops_scn(nullptr), prog_fd(-1), loaded(false) {
+      prog_fd(-1), loaded(false), struct_ops_scn(nullptr) {
   struct stat st;
   void *mmap_ret;
   int fd = open(c_path, 0, O_RDONLY);

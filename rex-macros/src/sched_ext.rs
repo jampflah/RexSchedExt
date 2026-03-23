@@ -136,11 +136,11 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
-                p: *mut crate::bindings::linux::kernel::task_struct,
+                p: *mut (),
                 prev_cpu: i32,
                 wake_flags: u64,
             ) -> i32 {
-                let task = unsafe { sched_ext::convert_task(p) };
+                let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, prev_cpu, wake_flags)
             }
         }
@@ -162,10 +162,10 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
-                p: *mut crate::bindings::linux::kernel::task_struct,
+                p: *mut (),
                 enq_flags: u64,
             ) {
-                let task = unsafe { sched_ext::convert_task(p) };
+                let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, enq_flags);
             }
         }
@@ -187,10 +187,10 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
-                p: *mut crate::bindings::linux::kernel::task_struct,
+                p: *mut (),
                 deq_flags: u64,
             ) {
-                let task = unsafe { sched_ext::convert_task(p) };
+                let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, deq_flags);
             }
         }
@@ -213,12 +213,12 @@ impl SchedExt {
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
                 cpu: i32,
-                prev: *mut crate::bindings::linux::kernel::task_struct,
+                prev: *mut (),
             ) {
                 let prev_task = if prev.is_null() {
                     None
                 } else {
-                    Some(unsafe { sched_ext::convert_task(prev) })
+                    Some(unsafe { sched_ext::convert_task(prev as *mut _) })
                 };
                 #fn_name(&#prog_ident, cpu, prev_task.as_ref());
             }
@@ -241,9 +241,9 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
-                p: *mut crate::bindings::linux::kernel::task_struct,
+                p: *mut (),
             ) {
-                let task = unsafe { sched_ext::convert_task(p) };
+                let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task);
             }
         }
@@ -265,10 +265,10 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
-                p: *mut crate::bindings::linux::kernel::task_struct,
+                p: *mut (),
                 runnable: bool,
             ) {
-                let task = unsafe { sched_ext::convert_task(p) };
+                let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, runnable);
             }
         }
@@ -290,10 +290,10 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
-                p: *mut crate::bindings::linux::kernel::task_struct,
+                p: *mut (),
                 deq_flags: u64,
             ) {
-                let task = unsafe { sched_ext::convert_task(p) };
+                let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, deq_flags);
             }
         }
@@ -315,10 +315,10 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
-                p: *mut crate::bindings::linux::kernel::task_struct,
+                p: *mut (),
                 weight: u32,
             ) {
-                let task = unsafe { sched_ext::convert_task(p) };
+                let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, weight);
             }
         }
@@ -403,7 +403,7 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
-                info: *const crate::sched_ext::ScxExitInfo,
+                info: *const ::rex::sched_ext::ScxExitInfo,
             ) {
                 let info_ref = unsafe { &*info };
                 #fn_name(&#prog_ident, info_ref);
@@ -427,10 +427,10 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
-                p: *mut crate::bindings::linux::kernel::task_struct,
-                args: *const crate::sched_ext::ScxInitTaskArgs,
+                p: *mut (),
+                args: *const ::rex::sched_ext::ScxInitTaskArgs,
             ) -> i32 {
-                let task = unsafe { sched_ext::convert_task(p) };
+                let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 let args_ref = unsafe { &*args };
                 #fn_name(&#prog_ident, &task, args_ref)
             }
@@ -453,10 +453,10 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
-                p: *mut crate::bindings::linux::kernel::task_struct,
-                args: *const crate::sched_ext::ScxExitTaskArgs,
+                p: *mut (),
+                args: *const ::rex::sched_ext::ScxExitTaskArgs,
             ) {
-                let task = unsafe { sched_ext::convert_task(p) };
+                let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 let args_ref = unsafe { &*args };
                 #fn_name(&#prog_ident, &task, args_ref);
             }

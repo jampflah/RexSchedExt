@@ -40,6 +40,14 @@ KSYM_FUNC(bpf_ktime_get_coarse_ns)
 KSYM_FUNC(rex_trace_printk)
 KSYM_FUNC(bpf_task_from_pid)
 KSYM_FUNC(bpf_task_release)
+KSYM_FUNC(scx_bpf_dsq_insert)
+KSYM_FUNC(scx_bpf_select_cpu_dfl)
+KSYM_FUNC(scx_bpf_consume)
+KSYM_FUNC(scx_bpf_kick_cpu)
+KSYM_FUNC(scx_bpf_create_dsq)
+KSYM_FUNC(scx_bpf_destroy_dsq)
+KSYM_FUNC(scx_bpf_task_cpu)
+KSYM_FUNC(scx_bpf_error)
 
 // Global variables
 unsigned long jiffies;
