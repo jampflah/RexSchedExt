@@ -58,12 +58,15 @@ impl SchedExt {
                 &fn_name, &prog_ident, &entry_name, &function_name,
                 &section_name,
             ),
-            "tick" | "running" | "enable" | "disable" | "runnable" => {
+            "tick" | "running" | "enable" | "disable"  => {
                 self.expand_task_only(
                     &fn_name, &prog_ident, &entry_name, &function_name,
                     &section_name,
                 )
-            }
+            },
+            "runnable" => self.expand_runnable(&fn_name, &prog_ident, &entry_name, &function_name,
+                &section_name,
+            ),
             "stopping" => self.expand_stopping(
                 &fn_name, &prog_ident, &entry_name, &function_name,
                 &section_name,
@@ -72,11 +75,26 @@ impl SchedExt {
                 &fn_name, &prog_ident, &entry_name, &function_name,
                 &section_name,
             ),
+            "yield" => self.expand_yield(&fn_name, &prog_ident, &entry_name, &function_name,
+                &section_name,
+            ),
+            "core_sched_before" => self.expand_core_sched_before(&fn_name, &prog_ident, &entry_name, &function_name,
+                &section_name,
+            ),
             "set_weight" => self.expand_set_weight(
                 &fn_name, &prog_ident, &entry_name, &function_name,
                 &section_name,
             ),
+            "set_cpumask" => self.expand_set_cpumask(
+                &fn_name, &prog_ident, &entry_name, &function_name,
+                &section_name,
+            ),
+            
             "update_idle" => self.expand_update_idle(
+                &fn_name, &prog_ident, &entry_name, &function_name,
+                &section_name,
+            ),
+            "cpu_acquire" => self.expand_cpu_acquire(
                 &fn_name, &prog_ident, &entry_name, &function_name,
                 &section_name,
             ),
@@ -103,14 +121,14 @@ impl SchedExt {
             _ => abort_call_site!(
                 "Unknown sched_ext callback \"{}\". Supported: \
                  select_cpu, enqueue, dequeue, dispatch, tick, runnable, \
-                 running, stopping, quiescent, set_weight, update_idle, \
-                 cpu_online, cpu_offline, init_task, exit_task, enable, \
-                 disable, init, exit",
+                 running, stopping, quiescent, set_weight, set_cpumask, \
+                 update_idle, cpu_acquire, cpu_online, cpu_offline, \
+                 init_task, exit_task, enable, disable, init, exit",
                 self.callback
             ),
         };
 
-        let tokens = quote! {
+        let tokens: TokenStream = quote! {
             #[inline(always)]
             #item
 
@@ -249,6 +267,31 @@ impl SchedExt {
         }
     }
 
+    // 	void (*runnable)(struct task_struct *p, u64 enq_flags)
+    fn expand_runnable(
+        &self,
+        fn_name: &syn::Ident,
+        prog_ident: &syn::Ident,
+        entry_name: &syn::Ident,
+        function_name: &str,
+        section_name: &str,
+    ) -> TokenStream {
+        quote! {
+            #[used]
+            static #prog_ident: sched_ext = unsafe { sched_ext::new() };
+
+            #[unsafe(export_name = #function_name)]
+            #[unsafe(link_section = #section_name)]
+            extern "C" fn #entry_name(
+                p: *mut (),
+                enq_flags: u64,
+            ) {
+                let task = unsafe { sched_ext::convert_task(p as *mut _) };
+                #fn_name(&#prog_ident, &task, enq_flags);
+            }
+        }
+    }
+
     // void (*stopping)(struct task_struct *p, bool runnable)
     fn expand_stopping(
         &self,
@@ -299,6 +342,62 @@ impl SchedExt {
         }
     }
 
+    // bool (*yield)(struct task_struct *from, struct task_struct *to);
+    fn expand_yield(
+        &self,
+        fn_name: &syn::Ident,
+        prog_ident: &syn::Ident,
+        entry_name: &syn::Ident,
+        function_name: &str,
+        section_name: &str,
+    ) -> TokenStream {
+        quote! {
+            #[used]
+            static #prog_ident: sched_ext = unsafe { sched_ext::new() };
+
+            #[unsafe(export_name = #function_name)]
+            #[unsafe(link_section = #section_name)]
+            extern "C" fn #entry_name(
+                from: *mut (),
+                to: *mut (),
+            ) {
+                let from_task = unsafe { sched_ext::convert_task(from as *mut _) };
+                let to_task = if to.is_null() {
+                    None
+                } else {
+                    Some(unsafe { sched_ext::convert_task(to as *mut _) })
+                };
+                #fn_name(&#prog_ident, &from_task, to_task.as_ref());
+            }
+        }
+    }
+
+    // bool (*core_sched_before)(struct task_struct *a, struct task_struct *b);
+    fn expand_core_sched_before(
+        &self,
+        fn_name: &syn::Ident,
+        prog_ident: &syn::Ident,
+        entry_name: &syn::Ident,
+        function_name: &str,
+        section_name: &str,
+    ) -> TokenStream {
+        quote! {
+            #[used]
+            static #prog_ident: sched_ext = unsafe { sched_ext::new() };
+
+            #[unsafe(export_name = #function_name)]
+            #[unsafe(link_section = #section_name)]
+            extern "C" fn #entry_name(
+                from: *mut (),
+                to: *mut (),
+            ) {
+                let from_task = unsafe { sched_ext::convert_task(from as *mut _) };
+                let to_task = unsafe { sched_ext::convert_task(to as *mut _) };
+                #fn_name(&#prog_ident, &from_task, &to_task);
+            }
+        }
+    }
+
     // void (*set_weight)(struct task_struct *p, u32 weight)
     fn expand_set_weight(
         &self,
@@ -324,6 +423,32 @@ impl SchedExt {
         }
     }
 
+    // void (*set_cpumask)(struct task_struct *p, const struct cpumask *cpumask)
+    fn expand_set_cpumask(
+        &self,
+        fn_name: &syn::Ident,
+        prog_ident: &syn::Ident,
+        entry_name: &syn::Ident,
+        function_name: &str,
+        section_name: &str,
+    ) -> TokenStream {
+        quote! {
+            #[used]
+            static #prog_ident: sched_ext = unsafe { sched_ext::new() };
+
+            #[unsafe(export_name = #function_name)]
+            #[unsafe(link_section = #section_name)]
+            extern "C" fn #entry_name(
+                p: *mut (),
+                cpumask: *const (),
+            ) {
+                let task = unsafe { sched_ext::convert_task(p as *mut _) };
+                let mask = unsafe { ::rex::sched_ext::Cpumask::from_raw(cpumask) };
+                #fn_name(&#prog_ident, &task, &mask);
+            }
+        }
+    }
+
     // void (*update_idle)(s32 cpu, bool idle)
     fn expand_update_idle(
         &self,
@@ -341,6 +466,27 @@ impl SchedExt {
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(cpu: i32, idle: bool) {
                 #fn_name(&#prog_ident, cpu, idle);
+            }
+        }
+    }
+
+    // void (*cpu_acquire)(s32 cpu, struct scx_cpu_acquire_args *args)
+    fn expand_cpu_acquire(
+        &self,
+        fn_name: &syn::Ident,
+        prog_ident: &syn::Ident,
+        entry_name: &syn::Ident,
+        function_name: &str,
+        section_name: &str,
+    ) -> TokenStream {
+        quote! {
+            #[used]
+            static #prog_ident: sched_ext = unsafe { sched_ext::new() };
+
+            #[unsafe(export_name = #function_name)]
+            #[unsafe(link_section = #section_name)]
+            extern "C" fn #entry_name(cpu: i32, _args: *const ()) {
+                #fn_name(&#prog_ident, cpu);
             }
         }
     }

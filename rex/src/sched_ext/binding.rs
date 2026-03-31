@@ -40,6 +40,47 @@ pub const SCX_OPS_ENQ_EXITING: u64 = 1 << 2;
 pub const SCX_OPS_SWITCH_PARTIAL: u64 = 1 << 3;
 pub const SCX_OPS_HAS_CGROUP_WEIGHT: u64 = 1 << 16;
 
+/// Wrapper around a kernel `struct cpumask *` passed into a sched_ext
+/// callback. Valid only for the duration of the callback.
+pub struct Cpumask {
+    kptr: *const (),
+}
+
+impl Cpumask {
+    /// # Safety
+    /// The caller must ensure `ptr` is a valid, non-null `cpumask` pointer
+    /// that remains valid for the duration of use.
+    #[inline(always)]
+    pub unsafe fn from_raw(ptr: *const ()) -> Self {
+        Cpumask { kptr: ptr }
+    }
+
+    /// Return the underlying raw pointer for passing to kernel helpers.
+    #[inline(always)]
+    pub fn as_ptr(&self) -> *const () {
+        self.kptr
+    }
+}
+
+pub struct ScxCpuAcquireArgs {
+    kptr: *mut ()
+}
+
+impl ScxCpuAcquireArgs {
+    // ptr is usually null
+    #[inline(always)]
+    pub unsafe fn from_raw(ptr: *mut ()) -> Self {
+        ScxCpuAcquireArgs { kptr: ptr }
+    }
+
+    #[inline(always)]
+    pub fn as_ptr(&self) -> *const () {
+        self.kptr
+    }
+}
+
+
+
 /// Exit info passed to ops.exit()
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
