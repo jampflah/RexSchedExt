@@ -81,11 +81,18 @@ impl sched_ext {
         (cpu, is_idle)
     }
 
-    /// Consume a task from the specified DSQ and transfer it to the
-    /// local CPU's DSQ. Returns true if a task was consumed.
+    /// Move a task from the specified DSQ to the local CPU's DSQ.
+    /// Returns true if a task was consumed.
+    /// (Replaces the old `scx_bpf_consume` which no longer exists.)
+    #[inline(always)]
+    pub fn scx_bpf_dsq_move_to_local(&self, dsq_id: u64) -> bool {
+        termination_check!(unsafe { ffi::scx_bpf_dsq_move_to_local(dsq_id) })
+    }
+
+    /// Backward-compatible alias for `scx_bpf_dsq_move_to_local`.
     #[inline(always)]
     pub fn scx_bpf_consume(&self, dsq_id: u64) -> bool {
-        termination_check!(unsafe { ffi::scx_bpf_consume(dsq_id) })
+        self.scx_bpf_dsq_move_to_local(dsq_id)
     }
 
     /// Kick the specified CPU to trigger rescheduling.
@@ -117,10 +124,73 @@ impl sched_ext {
 
     /// Report a fatal scheduler error. The scheduler will be unloaded
     /// and the system will fall back to the default scheduler.
+    /// Uses `scx_bpf_error_bstr(fmt, data, data__sz)` under the hood.
     #[inline(always)]
     pub fn scx_bpf_error_str(&self, msg: &str) {
         termination_check!(unsafe {
-            ffi::scx_bpf_error(msg.as_ptr(), msg.len() as u32)
+            ffi::scx_bpf_error_bstr(
+                msg.as_ptr(),
+                core::ptr::null(),
+                0,
+            )
         })
+    }
+
+    /// Insert task `p` into a VTIME-ordered dispatch queue.
+    #[inline(always)]
+    pub fn scx_bpf_dsq_insert_vtime(
+        &self,
+        p: &TaskStruct,
+        dsq_id: u64,
+        slice: u64,
+        vtime: u64,
+        enq_flags: u64,
+    ) {
+        termination_check!(unsafe {
+            ffi::scx_bpf_dsq_insert_vtime(p.as_ptr(), dsq_id, slice, vtime, enq_flags)
+        })
+    }
+
+    /// Return the number of remaining dispatch slots in the current
+    /// dispatch context.
+    #[inline(always)]
+    pub fn scx_bpf_dispatch_nr_slots(&self) -> u32 {
+        termination_check!(unsafe { ffi::scx_bpf_dispatch_nr_slots() })
+    }
+
+    /// Cancel the last dispatch operation.
+    #[inline(always)]
+    pub fn scx_bpf_dispatch_cancel(&self) {
+        termination_check!(unsafe { ffi::scx_bpf_dispatch_cancel() })
+    }
+
+    /// Return the number of tasks queued in the specified DSQ.
+    #[inline(always)]
+    pub fn scx_bpf_dsq_nr_queued(&self, dsq_id: u64) -> i32 {
+        termination_check!(unsafe { ffi::scx_bpf_dsq_nr_queued(dsq_id) })
+    }
+
+    /// Set the time slice for the given task.
+    #[inline(always)]
+    pub fn scx_bpf_task_set_slice(&self, p: &TaskStruct, slice: u64) -> bool {
+        termination_check!(unsafe { ffi::scx_bpf_task_set_slice(p.as_ptr(), slice) })
+    }
+
+    /// Set the virtual time of a task for VTIME-ordered DSQs.
+    #[inline(always)]
+    pub fn scx_bpf_task_set_dsq_vtime(&self, p: &TaskStruct, vtime: u64) -> bool {
+        termination_check!(unsafe { ffi::scx_bpf_task_set_dsq_vtime(p.as_ptr(), vtime) })
+    }
+
+    /// Re-enqueue tasks from the local DSQ after a CPU goes offline.
+    #[inline(always)]
+    pub fn scx_bpf_reenqueue_local(&self) -> u32 {
+        termination_check!(unsafe { ffi::scx_bpf_reenqueue_local() })
+    }
+
+    /// Return the number of possible CPUs.
+    #[inline(always)]
+    pub fn scx_bpf_nr_cpu_ids(&self) -> u32 {
+        termination_check!(unsafe { ffi::scx_bpf_nr_cpu_ids() })
     }
 }

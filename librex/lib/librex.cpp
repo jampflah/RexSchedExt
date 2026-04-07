@@ -231,16 +231,6 @@ public:
   friend struct ::rex_obj;
 };
 
-/// Metadata for a sched_ext struct_ops definition parsed from ELF
-struct rex_struct_ops {
-  std::string name;
-  Elf64_Off offset;
-  uint64_t size;
-
-  rex_struct_ops(const char *nm, Elf64_Off off, uint64_t sz)
-      : name(nm), offset(off), size(sz) {}
-};
-
 struct rex_obj {
 private:
   struct elf_del {
@@ -268,7 +258,6 @@ private:
 
   std::vector<rex_prog> progs;
   std::unordered_map<Elf64_Off, rex_map> map_defs;
-  std::vector<rex_struct_ops> struct_ops_defs;
 
   std::unique_ptr<Elf, elf_del> elf;
   Elf_Scn *symtab_scn;
@@ -292,14 +281,16 @@ private:
   std::string basename;
   std::unique_ptr<bpf_object, bpf_obj_del> bpf_obj_ptr;
 
-  Elf_Scn *struct_ops_scn;
+  std::vector<std::pair<std::string, uint64_t>> sched_ext_cbs;
+  bool sched_ext_attached = false;
 
   int parse_scns();
   int parse_maps();
   int parse_progs();
-  int parse_struct_ops();
   int parse_got();
   int parse_rela_dyn();
+  int attach_sched_ext();
+  void detach_sched_ext();
 
 public:
   rex_obj() = delete;
@@ -319,7 +310,7 @@ public:
 
 rex_obj::rex_obj(const char *c_path)
     : map_defs(), symtab_scn(nullptr), dynsym_scn(nullptr), maps_scn(nullptr),
-      prog_fd(-1), loaded(false), struct_ops_scn(nullptr) {
+      prog_fd(-1), loaded(false) {
   struct stat st;
   void *mmap_ret;
   int fd = open(c_path, 0, O_RDONLY);
@@ -348,6 +339,7 @@ rex_obj::rex_obj(const char *c_path)
 }
 
 rex_obj::~rex_obj() {
+  detach_sched_ext();
   prog_fd.transform([](int fd) { return close(fd); });
 }
 
@@ -387,17 +379,12 @@ int rex_obj::parse_scns() {
       this->dynsym_scn = scn;
     else if (!strcmp(".maps", name))
       this->maps_scn = scn;
-    else if (!strcmp(".struct_ops", name))
-      this->struct_ops_scn = scn;
     else if (sh->sh_type == SHT_RELA && !strcmp(".rela.dyn", name))
       this->rela_dyn_scn = scn;
   }
 
   if (!this->maps_scn && debug)
     std::clog << "section .maps not found" << std::endl;
-
-  if (!this->struct_ops_scn && debug)
-    std::clog << "section .struct_ops not found" << std::endl;
 
   if (!this->rela_dyn_scn && debug)
     std::clog << "section .rela.dyn not found" << std::endl;
@@ -513,6 +500,17 @@ int rex_obj::parse_progs() {
                 << std::endl;
     }
 
+    constexpr std::string_view scx_pfx = "rex/struct_ops/sched_ext_ops/";
+    if (std::string_view(scn_name).starts_with(scx_pfx)) {
+      std::string cb_name(std::string_view(scn_name).substr(scx_pfx.size()));
+      sched_ext_cbs.emplace_back(std::move(cb_name), sym->st_value);
+      if (debug)
+        std::clog << "sched_ext callback: " << sched_ext_cbs.back().first
+                  << " at offset 0x" << std::hex << sym->st_value
+                  << std::dec << std::endl;
+      continue;
+    }
+
     sec_def = find_sec_def(scn_name);
     if (!sec_def)
       continue;
@@ -607,52 +605,6 @@ int rex_obj::parse_rela_dyn() {
   return 0;
 }
 
-int rex_obj::parse_struct_ops() {
-  Elf_Data *data, *syms;
-  int nr_syms;
-  size_t strtabidx;
-  int struct_ops_shndx;
-
-  if (!this->struct_ops_scn)
-    return 0;
-
-  data = elf_getdata(struct_ops_scn, 0);
-  syms = elf_getdata(symtab_scn, 0);
-
-  if (!syms || !data) {
-    std::cerr << "elf: failed to get .struct_ops data" << std::endl;
-    return -1;
-  }
-
-  strtabidx = elf64_getshdr(symtab_scn)->sh_link;
-  struct_ops_shndx = elf_ndxscn(struct_ops_scn);
-  nr_syms = syms->d_size / sizeof(Elf64_Sym);
-
-  for (int i = 0; i < nr_syms; i++) {
-    Elf64_Sym *sym = reinterpret_cast<Elf64_Sym *>(syms->d_buf) + i;
-
-    if (sym->st_shndx != struct_ops_shndx ||
-        ELF64_ST_TYPE(sym->st_info) != STT_OBJECT)
-      continue;
-
-    char *name = elf_strptr(elf.get(), strtabidx, sym->st_name);
-
-    if (debug) {
-      std::clog << "struct_ops: " << name << ", st_value=0x" << std::hex
-                << sym->st_value << ", st_size=" << std::dec << sym->st_size
-                << std::endl;
-    }
-
-    struct_ops_defs.emplace_back(name, sym->st_value, sym->st_size);
-  }
-
-  if (debug)
-    std::clog << "# of struct_ops definitions: " << struct_ops_defs.size()
-              << std::endl;
-
-  return 0;
-}
-
 int rex_obj::parse_elf() {
   int ret;
 
@@ -664,7 +616,6 @@ int rex_obj::parse_elf() {
   ret = this->parse_scns();
   ret = ret < 0 ? ret : this->parse_maps();
   ret = ret < 0 ? ret : this->parse_progs();
-  ret = ret < 0 ? ret : this->parse_struct_ops();
   ret = ret < 0 ? ret : this->parse_rela_dyn();
 
   return ret;
@@ -795,6 +746,11 @@ int rex_obj::load() {
                 << " loaded, fd = " << prog.prog_fd.value_or(-1) << std::endl;
   }
 
+  if (int scx_ret = attach_sched_ext(); scx_ret < 0) {
+    std::cerr << "sched_ext attach failed" << std::endl;
+    goto close_fds;
+  }
+
   loaded = true;
   return ret;
 
@@ -810,6 +766,56 @@ close_fds:
     return std::nullopt;
   });
   return -1;
+}
+
+int rex_obj::attach_sched_ext() {
+  if (sched_ext_cbs.empty())
+    return 0;
+
+  if (!prog_fd.has_value()) {
+    std::cerr << "sched_ext: base program not loaded" << std::endl;
+    return -1;
+  }
+
+  std::vector<std::string> names;
+  names.reserve(sched_ext_cbs.size());
+
+  std::vector<rex_sched_ops_sym> syms(sched_ext_cbs.size());
+  for (size_t i = 0; i < sched_ext_cbs.size(); i++) {
+    names.push_back(sched_ext_cbs[i].first);
+    syms[i].name   = names.back().c_str();
+    syms[i].offset = sched_ext_cbs[i].second;
+  }
+
+  union bpf_attr attr = {};
+  attr.sched_ext_attach.base_prog_fd     = prog_fd.value();
+  attr.sched_ext_attach.sched_ops_syms   = reinterpret_cast<__u64>(syms.data());
+  attr.sched_ext_attach.nr_sched_ops_syms = static_cast<__u32>(syms.size());
+
+  int ret = bpf(BPF_SCHED_EXT_ATTACH_REX, &attr, sizeof(attr));
+  if (ret < 0) {
+    perror("bpf_sched_ext_attach_rex");
+    return ret;
+  }
+
+  sched_ext_attached = true;
+  if (debug)
+    std::clog << "sched_ext: scheduler attached" << std::endl;
+  return 0;
+}
+
+void rex_obj::detach_sched_ext() {
+  if (!sched_ext_attached)
+    return;
+
+  union bpf_attr attr = {};
+  int ret = bpf(BPF_SCHED_EXT_DETACH_REX, &attr, sizeof(attr));
+  if (ret < 0)
+    perror("bpf_sched_ext_detach_rex");
+
+  sched_ext_attached = false;
+  if (debug)
+    std::clog << "sched_ext: scheduler detached" << std::endl;
 }
 
 bpf_object *rex_obj::bpf_obj() {

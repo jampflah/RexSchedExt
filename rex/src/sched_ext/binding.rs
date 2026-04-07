@@ -65,6 +65,13 @@ pub struct ScxExitTaskArgs {
     pub cancelled: bool,
 }
 
+/// Arguments passed to ops.cgroup_init()
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ScxCgroupInitArgs {
+    pub weight: u32,
+}
+
 /// Metadata for the scheduler ops definition.
 /// Placed in `.struct_ops` ELF section by the #[rex_sched_ext_ops] macro.
 #[repr(C)]

@@ -265,9 +265,9 @@ unsafe extern "C" {
         is_idle: *mut bool,
     ) -> i32;
 
-    /// bool scx_bpf_consume(u64 dsq_id)
+    /// bool scx_bpf_dsq_move_to_local(u64 dsq_id)
     #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
-    pub(crate) fn scx_bpf_consume(dsq_id: u64) -> bool;
+    pub(crate) fn scx_bpf_dsq_move_to_local(dsq_id: u64) -> bool;
 
     /// void scx_bpf_kick_cpu(s32 cpu, u64 flags)
     #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
@@ -285,9 +285,48 @@ unsafe extern "C" {
     #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
     pub(crate) fn scx_bpf_task_cpu(p: *mut task_struct) -> i32;
 
-    /// void scx_bpf_error(const char *msg, u32 len)
+    /// void scx_bpf_error_bstr(char *fmt, unsigned long long *data, u32 data__sz)
     #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
-    pub(crate) fn scx_bpf_error(msg: *const u8, len: u32);
+    pub(crate) fn scx_bpf_error_bstr(fmt: *const u8, data: *const u64, data_sz: u32);
+
+    /// void scx_bpf_dsq_insert_vtime(struct task_struct *p, u64 dsq_id,
+    ///                               u64 slice, u64 vtime, u64 enq_flags)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_dsq_insert_vtime(
+        p: *mut task_struct,
+        dsq_id: u64,
+        slice: u64,
+        vtime: u64,
+        enq_flags: u64,
+    );
+
+    /// u32 scx_bpf_dispatch_nr_slots(void)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_dispatch_nr_slots() -> u32;
+
+    /// void scx_bpf_dispatch_cancel(void)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_dispatch_cancel();
+
+    /// s32 scx_bpf_dsq_nr_queued(u64 dsq_id)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_dsq_nr_queued(dsq_id: u64) -> i32;
+
+    /// bool scx_bpf_task_set_slice(struct task_struct *p, u64 slice)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_task_set_slice(p: *mut task_struct, slice: u64) -> bool;
+
+    /// bool scx_bpf_task_set_dsq_vtime(struct task_struct *p, u64 vtime)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_task_set_dsq_vtime(p: *mut task_struct, vtime: u64) -> bool;
+
+    /// u32 scx_bpf_reenqueue_local(void)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_reenqueue_local() -> u32;
+
+    /// u32 scx_bpf_nr_cpu_ids(void)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_nr_cpu_ids() -> u32;
 }
 
 // Global variables
