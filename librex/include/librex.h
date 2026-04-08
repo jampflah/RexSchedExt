@@ -16,6 +16,10 @@ rex_obj_load(const char *file_path);
 [[nodiscard, gnu::visibility("default")]] struct bpf_object *
 rex_obj_get_bpf(struct rex_obj *obj);
 
+[[gnu::visibility("default")]] int rex_obj_attach(struct rex_obj *obj);
+
+[[gnu::visibility("default")]] void rex_obj_detach(struct rex_obj *obj);
+
 #ifdef __cplusplus
 }
 #endif

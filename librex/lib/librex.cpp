@@ -289,9 +289,6 @@ private:
   int parse_progs();
   int parse_got();
   int parse_rela_dyn();
-  int attach_sched_ext();
-  void detach_sched_ext();
-
 public:
   rex_obj() = delete;
   explicit rex_obj(const char *);
@@ -305,6 +302,8 @@ public:
   int parse_elf();
   int fix_maps();
   int load();
+  int attach_sched_ext();
+  void detach_sched_ext();
   bpf_object *bpf_obj();
 };
 
@@ -746,11 +745,6 @@ int rex_obj::load() {
                 << " loaded, fd = " << prog.prog_fd.value_or(-1) << std::endl;
   }
 
-  if (int scx_ret = attach_sched_ext(); scx_ret < 0) {
-    std::cerr << "sched_ext attach failed" << std::endl;
-    goto close_fds;
-  }
-
   loaded = true;
   return ret;
 
@@ -898,10 +892,23 @@ rex_obj_load(const char *file_path) {
 
 [[nodiscard, gnu::visibility("default")]] bpf_object *
 rex_obj_get_bpf(rex_obj *obj) {
+  if (!obj)
+    return nullptr;
   try {
     return obj->bpf_obj();
   } catch (std::exception &e) {
     std::cerr << e.what() << std::endl;
     return nullptr;
   }
+}
+
+[[gnu::visibility("default")]] int rex_obj_attach(rex_obj *obj) {
+  if (!obj)
+    return -1;
+  return obj->attach_sched_ext();
+}
+
+[[gnu::visibility("default")]] void rex_obj_detach(rex_obj *obj) {
+  if (obj)
+    obj->detach_sched_ext();
 }
