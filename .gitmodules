@@ -1,7 +1,7 @@
 [submodule "linux"]
 	path = linux
-	url = git@github.com:rex-rs/linux.git
-	branch = rex-linux
+	url = git@github.com:jampflah/linux_523.git
+	branch = rex-linux-sched
 [submodule "rust"]
 	path = rust
 	url = git@github.com:rex-rs/rust.git
