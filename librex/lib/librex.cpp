@@ -499,7 +499,7 @@ int rex_obj::parse_progs() {
                 << std::endl;
     }
 
-    constexpr std::string_view scx_pfx = "rex/struct_ops/sched_ext_ops/";
+    constexpr std::string_view scx_pfx = "struct_ops/sched_ext_ops/";
     if (std::string_view(scn_name).starts_with(scx_pfx)) {
       std::string cb_name(std::string_view(scn_name).substr(scx_pfx.size()));
       sched_ext_cbs.emplace_back(std::move(cb_name), sym->st_value);
@@ -763,8 +763,10 @@ close_fds:
 }
 
 int rex_obj::attach_sched_ext() {
-  if (sched_ext_cbs.empty())
-    return 0;
+  if (sched_ext_cbs.empty()) {
+    std::cerr << "sched_ext: no callbacks found in binary" << std::endl;
+    return -ENOENT;
+  }
 
   if (!prog_fd.has_value()) {
     std::cerr << "sched_ext: base program not loaded" << std::endl;

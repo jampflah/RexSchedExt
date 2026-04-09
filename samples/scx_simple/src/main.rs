@@ -20,6 +20,8 @@ fn simple_select_cpu(
 ) -> i32 {
     let (cpu, is_idle) = obj.scx_bpf_select_cpu_dfl(p, prev_cpu, wake_flags);
     if is_idle {
+        rex_printk!("[scx_simple] select_cpu: pid={} prev_cpu={} -> cpu={} (idle, direct dispatch)\n",
+                    p.get_pid(), prev_cpu, cpu).ok();
         obj.scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, SCX_SLICE_DFL, 0);
     }
     cpu
@@ -28,6 +30,7 @@ fn simple_select_cpu(
 /// Enqueue a runnable task into the shared FIFO dispatch queue.
 #[rex_sched_ext(callback = "enqueue")]
 fn simple_enqueue(obj: &sched_ext, p: &TaskStruct, enq_flags: u64) {
+    rex_printk!("[scx_simple] enqueue: pid={} flags={}\n", p.get_pid(), enq_flags).ok();
     obj.scx_bpf_dsq_insert(p, SHARED_DSQ, SCX_SLICE_DFL, enq_flags);
 }
 
@@ -38,21 +41,31 @@ fn simple_dispatch(
     _cpu: i32,
     _prev: Option<&TaskStruct>,
 ) {
+    rex_printk!("[scx_simple] dispatch: cpu={} pulling from shared DSQ\n", _cpu).ok();
     obj.scx_bpf_dsq_move_to_local(SHARED_DSQ);
 }
 
 /// Called once when the scheduler is loaded. Creates the shared DSQ.
 #[rex_sched_ext(callback = "init")]
 fn simple_init(obj: &sched_ext) -> i32 {
+    rex_printk!("[scx_simple] init: creating shared DSQ (id={})\n", SHARED_DSQ).ok();
     match obj.scx_bpf_create_dsq(SHARED_DSQ, -1) {
-        Ok(_) => 0,
-        Err(e) => e,
+        Ok(_) => {
+            rex_printk!("[scx_simple] init: shared DSQ created successfully!\n").ok();
+            0
+        }
+        Err(e) => {
+            rex_printk!("[scx_simple] init: FAILED to create shared DSQ, err={}\n", e).ok();
+            e
+        }
     }
 }
 
 /// Called when the scheduler is being unloaded.
 #[rex_sched_ext(callback = "exit")]
-fn simple_exit(_obj: &sched_ext, _info: &ScxExitInfo) {}
+fn simple_exit(_obj: &sched_ext, _info: &ScxExitInfo) {
+    rex_printk!("[scx_simple] exit: scheduler is being unloaded\n").ok();
+}
 
 /// Scheduler ops metadata placed in .struct_ops section.
 #[rex_sched_ext_ops]

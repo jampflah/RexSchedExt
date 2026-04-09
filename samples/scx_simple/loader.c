@@ -22,25 +22,32 @@ int main(void)
 	signal(SIGINT, sighandler);
 	signal(SIGTERM, sighandler);
 
+	fprintf(stdout, "[loader] Loading Rex object from %s ...\n", EXE);
+
 	robj = rex_obj_load(EXE);
 	if (!robj) {
-		fprintf(stderr, "Failed to load Rex object\n");
+		fprintf(stderr, "[loader] FAILED to load Rex object\n");
 		return 1;
 	}
+	fprintf(stdout, "[loader] Rex object loaded successfully.\n");
 
+	fprintf(stdout, "[loader] Attaching sched_ext scheduler ...\n");
 	if (rex_obj_attach(robj)) {
-		fprintf(stderr, "Failed to attach sched_ext scheduler\n");
+		fprintf(stderr, "[loader] FAILED to attach sched_ext scheduler\n");
 		return 1;
 	}
 
-	fprintf(stdout, "scx_simple scheduler attached.\n");
-	fprintf(stdout, "Press Ctrl-C to exit.\n");
+	fprintf(stdout, "[loader] scx_simple scheduler attached and ACTIVE.\n");
+	fprintf(stdout, "[loader] Rex is now controlling CPU scheduling.\n");
+	fprintf(stdout, "[loader] Check 'dmesg' or 'trace_pipe' for kernel/BPF logs.\n");
+	fprintf(stdout, "[loader] Press Ctrl-C to exit.\n");
 
 	while (running)
 		sleep(1);
 
+	fprintf(stdout, "\n[loader] Detaching scx_simple scheduler ...\n");
 	rex_obj_detach(robj);
-	fprintf(stdout, "scx_simple scheduler detached.\n");
+	fprintf(stdout, "[loader] scx_simple scheduler detached. Returning to default scheduler.\n");
 
 	return 0;
 }
