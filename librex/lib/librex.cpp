@@ -283,6 +283,11 @@ private:
 
   std::vector<std::pair<std::string, uint64_t>> sched_ext_cbs;
   bool sched_ext_attached = false;
+  struct {
+    uint64_t flags = 0;
+    uint32_t timeout_ms = 0;
+    uint32_t exit_dump_len = 0;
+  } sched_ext_ops_cfg;
 
   int parse_scns();
   int parse_maps();
@@ -476,7 +481,33 @@ int rex_obj::parse_progs() {
     char *scn_name, *sym_name;
     const bpf_sec_def *sec_def;
 
-    if (!scn || ELF64_ST_TYPE(sym->st_info) != STT_FUNC)
+    if (!scn)
+      continue;
+
+    if (ELF64_ST_TYPE(sym->st_info) == STT_OBJECT) {
+      scn_name = elf_strptr(elf.get(), shstrndx, elf64_getshdr(scn)->sh_name);
+      if (scn_name && !strcmp(scn_name, ".struct_ops") &&
+          sym->st_size >= 16) {
+        Elf_Data *scn_data = elf_getdata(scn, 0);
+        if (scn_data) {
+          Elf64_Addr base = elf64_getshdr(scn)->sh_addr;
+          const uint8_t *p = reinterpret_cast<const uint8_t *>(scn_data->d_buf)
+                             + sym->st_value - base;
+          memcpy(&sched_ext_ops_cfg.flags,        p + 0,  8);
+          memcpy(&sched_ext_ops_cfg.timeout_ms,   p + 8,  4);
+          memcpy(&sched_ext_ops_cfg.exit_dump_len, p + 12, 4);
+          if (debug)
+            std::clog << "sched_ext ops: flags=0x" << std::hex
+                      << sched_ext_ops_cfg.flags << std::dec
+                      << " timeout_ms=" << sched_ext_ops_cfg.timeout_ms
+                      << " exit_dump_len=" << sched_ext_ops_cfg.exit_dump_len
+                      << std::endl;
+        }
+      }
+      continue;
+    }
+
+    if (ELF64_ST_TYPE(sym->st_info) != STT_FUNC)
       continue;
 
     scn_name = elf_strptr(elf.get(), shstrndx, elf64_getshdr(scn)->sh_name);
@@ -499,7 +530,7 @@ int rex_obj::parse_progs() {
                 << std::endl;
     }
 
-    constexpr std::string_view scx_pfx = "rex/struct_ops/sched_ext_ops/";
+    constexpr std::string_view scx_pfx = "struct_ops/sched_ext_ops/";
     if (std::string_view(scn_name).starts_with(scx_pfx)) {
       std::string cb_name(std::string_view(scn_name).substr(scx_pfx.size()));
       sched_ext_cbs.emplace_back(std::move(cb_name), sym->st_value);
@@ -782,9 +813,12 @@ int rex_obj::attach_sched_ext() {
   }
 
   union bpf_attr attr = {};
-  attr.sched_ext_attach.base_prog_fd     = prog_fd.value();
-  attr.sched_ext_attach.sched_ops_syms   = reinterpret_cast<__u64>(syms.data());
+  attr.sched_ext_attach.base_prog_fd      = prog_fd.value();
+  attr.sched_ext_attach.sched_ops_syms    = reinterpret_cast<__u64>(syms.data());
   attr.sched_ext_attach.nr_sched_ops_syms = static_cast<__u32>(syms.size());
+  attr.sched_ext_attach.ops_flags         = sched_ext_ops_cfg.flags;
+  attr.sched_ext_attach.timeout_ms        = sched_ext_ops_cfg.timeout_ms;
+  attr.sched_ext_attach.exit_dump_len     = sched_ext_ops_cfg.exit_dump_len;
 
   int ret = bpf(BPF_SCHED_EXT_ATTACH_REX, &attr, sizeof(attr));
   if (ret < 0) {
