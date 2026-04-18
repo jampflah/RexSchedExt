@@ -7,6 +7,66 @@ use crate::ffi;
 use crate::task_struct::TaskStruct;
 use crate::utils::{to_result, NoRef, Result};
 
+/// Record the current jiffies as this CPU's Rex op-entry timestamp.
+///
+/// Called from the generated `extern "C"` entry wrapper for every Rex
+/// sched_ext op, before the user callback body runs. The value is later
+/// consulted by `termination_check!` on every helper/kfunc call to decide
+/// whether the op has exceeded `rex_op_timeout_jiffies`.
+///
+/// This function must not call any Rex helper (no `termination_check!`)
+/// because it runs at op entry where the cooperative watchdog state has
+/// not yet been set up.
+#[inline(always)]
+pub unsafe fn __rex_op_enter() {
+    unsafe {
+        let entry_ptr: *mut u64 = crate::per_cpu::this_cpu_ptr_mut(
+            &raw mut crate::ffi::rex_op_entry_jiffies,
+        );
+        let now = core::ptr::read_volatile(&raw const crate::ffi::jiffies);
+        core::ptr::write_volatile(entry_ptr, now);
+    }
+}
+
+/// Clear this CPU's Rex op-entry timestamp on normal return from the op.
+///
+/// The panic path intentionally skips this: `rex_landingpad_asm` abandons
+/// the Rust stack frames above it so no `Drop` destructors run. The Rex
+/// panic handler in `rex::panic` clears the timestamp instead.
+#[inline(always)]
+pub unsafe fn __rex_op_exit() {
+    unsafe {
+        let entry_ptr: *mut u64 = crate::per_cpu::this_cpu_ptr_mut(
+            &raw mut crate::ffi::rex_op_entry_jiffies,
+        );
+        core::ptr::write_volatile(entry_ptr, 0);
+    }
+}
+
+/// RAII guard used by the `#[rex_sched_ext]` macro to bracket every
+/// generated `extern "C"` op entry with `__rex_op_enter` / `__rex_op_exit`.
+///
+/// On normal return the guard's `Drop` clears the per-CPU op-entry
+/// timestamp. On the Rex panic path, `rex_landingpad_asm` longjmps back
+/// to `rex_dispatcher_func` and the guard's `Drop` is skipped; the Rex
+/// panic handler clears the timestamp in that case.
+pub struct RexOpGuard;
+
+impl RexOpGuard {
+    #[inline(always)]
+    pub unsafe fn enter() -> Self {
+        unsafe { __rex_op_enter(); }
+        RexOpGuard
+    }
+}
+
+impl Drop for RexOpGuard {
+    #[inline(always)]
+    fn drop(&mut self) {
+        unsafe { __rex_op_exit(); }
+    }
+}
+
 #[repr(C)]
 pub struct sched_ext {
     _placeholder: PhantomData<()>,

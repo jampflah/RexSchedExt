@@ -376,6 +376,34 @@ unsafe extern "C" {
     ///  inside a helper, or inside a panic handler, or just in BPF text.
     pub(crate) static mut rex_termination_state: u8;
 
+    /// `DEFINE_PER_CPU(u64, rex_op_entry_jiffies);`
+    ///
+    /// Jiffies timestamp recorded when a Rex sched_ext op begins executing
+    /// on this CPU. Compared against `rex_op_timeout_jiffies` inside
+    /// `termination_check!` to detect a runaway op cooperatively. A value of
+    /// zero means "not currently inside a Rex op" and suppresses the check.
+    pub(crate) static mut rex_op_entry_jiffies: u64;
+
+    /// `unsigned long rex_op_timeout_jiffies;` (global, set by
+    /// `scx_enable_rex()`). Timeout in jiffies after which a Rex sched_ext
+    /// op is considered stuck. Zero disables the cooperative check.
+    pub(crate) static rex_op_timeout_jiffies: u64;
+
+    /// `extern unsigned long volatile jiffies;`
+    ///
+    /// Read via `read_volatile` to approximate `READ_ONCE(jiffies)`. On
+    /// 64-bit this is already the full counter; on 32-bit the upper half is
+    /// approximate but monotonic enough for the cooperative watchdog.
+    pub(crate) static jiffies: u64;
+
+    /// `void rex_scx_report_stall(void);`
+    ///
+    /// Called from `termination_check!` right before `__rex_handle_timeout`
+    /// to notify the sched_ext core that the current Rex scheduler op has
+    /// stalled, triggering `scx_exit(SCX_EXIT_ERROR_STALL)`. After the
+    /// following panic/landingpad returns, CFS takes over.
+    pub(crate) fn rex_scx_report_stall();
+
     /// DEFINE_PER_CPU_READ_MOSTLY(unsigned long, this_cpu_off) =
     /// BOOT_PERCPU_OFFSET;
     ///

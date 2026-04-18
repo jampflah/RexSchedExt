@@ -172,6 +172,18 @@ fn panic(info: &PanicInfo) -> ! {
         *termination_flag = 1;
     };
 
+    // Clear the per-CPU Rex sched_ext op-entry timestamp so helper calls
+    // made by the cleanup path do not re-enter the elapsed-time branch of
+    // termination_check! (which would cause infinite panic recursion). It
+    // is also the panic-path counterpart of the RexOpGuard's Drop, which
+    // is skipped when rex_landingpad_asm longjmps over the Rust frames.
+    unsafe {
+        let entry_ptr: *mut u64 = crate::per_cpu::this_cpu_ptr_mut(
+            &raw mut crate::ffi::rex_op_entry_jiffies,
+        );
+        core::ptr::write_volatile(entry_ptr, 0);
+    }
+
     unsafe { CleanupEntries::cleanup_all() };
 
     let mut buf = LogBuf::new();

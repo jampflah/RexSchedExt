@@ -26,9 +26,48 @@ macro_rules! termination_check {
         // Call the provided function
         let res = $func;
 
+        // Cooperative elapsed-time watchdog. If we've been inside a Rex
+        // sched_ext op longer than rex_op_timeout_jiffies, request a
+        // termination by upgrading the flag to 2. This is the only path
+        // that can rescue an op stuck on a CPU with IRQs disabled, because
+        // no timer/IPI can reach that CPU.
+        //
+        // `in_scx_op` doubles as a guard for `rex_scx_report_stall`: it is
+        // only valid to call when the current Rex program is a sched_ext
+        // op, which is exactly when `rex_op_entry_jiffies` is non-zero.
+        let in_scx_op: bool = unsafe {
+            let entry_ptr: *const u64 = crate::per_cpu::this_cpu_ptr(
+                &raw const crate::ffi::rex_op_entry_jiffies,
+            );
+            let entry = core::ptr::read_volatile(entry_ptr);
+            if entry != 0 {
+                let now = core::ptr::read_volatile(
+                    &raw const crate::ffi::jiffies,
+                );
+                let timeout = core::ptr::read_volatile(
+                    &raw const crate::ffi::rex_op_timeout_jiffies,
+                );
+                if core::intrinsics::unlikely(
+                    timeout != 0 && now.wrapping_sub(entry) > timeout,
+                ) {
+                    *termination_flag = 2;
+                }
+                true
+            } else {
+                false
+            }
+        };
+
         // Check the termination flag and handle timeout
         unsafe {
             if core::intrinsics::unlikely(*termination_flag == 2) {
+                // Notify sched_ext that this scheduler has stalled so CFS
+                // can take over once the panic unwinds through the landing
+                // pad. Only valid inside a Rex sched_ext op; non-sched_ext
+                // programs skip the notification and just unwind.
+                if in_scx_op {
+                    crate::ffi::rex_scx_report_stall();
+                }
                 crate::panic::__rex_handle_timeout();
             } else {
                 // Reset the termination flag upon exiting

@@ -5,6 +5,13 @@ use syn::{parse2, ItemFn, Result};
 
 use crate::args::parse_string_args;
 
+// Every generated `extern "C"` sched_ext op entry starts with
+//     let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
+// to acquire the per-CPU Rex op-entry timestamp used by the cooperative
+// watchdog in `termination_check!`. The RAII guard's `Drop` clears the
+// timestamp on normal return; the Rex panic handler clears it on the
+// `rex_landingpad` path.
+
 pub(crate) struct SchedExt {
     callback: String,
     item: ItemFn,
@@ -184,6 +191,7 @@ impl SchedExt {
                 prev_cpu: i32,
                 wake_flags: u64,
             ) -> i32 {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, prev_cpu, wake_flags)
             }
@@ -209,6 +217,7 @@ impl SchedExt {
                 p: *mut (),
                 enq_flags: u64,
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, enq_flags);
             }
@@ -234,6 +243,7 @@ impl SchedExt {
                 p: *mut (),
                 deq_flags: u64,
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, deq_flags);
             }
@@ -259,6 +269,7 @@ impl SchedExt {
                 cpu: i32,
                 prev: *mut (),
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let prev_task = if prev.is_null() {
                     None
                 } else {
@@ -287,6 +298,7 @@ impl SchedExt {
             extern "C" fn #entry_name(
                 p: *mut (),
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task);
             }
@@ -312,6 +324,7 @@ impl SchedExt {
                 p: *mut (),
                 enq_flags: u64,
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, enq_flags);
             }
@@ -337,6 +350,7 @@ impl SchedExt {
                 p: *mut (),
                 runnable: bool,
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, runnable);
             }
@@ -362,6 +376,7 @@ impl SchedExt {
                 p: *mut (),
                 deq_flags: u64,
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, deq_flags);
             }
@@ -387,6 +402,7 @@ impl SchedExt {
                 p: *mut (),
                 weight: u32,
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, weight);
             }
@@ -409,6 +425,7 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(cpu: i32, idle: bool) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 #fn_name(&#prog_ident, cpu, idle);
             }
         }
@@ -430,6 +447,7 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(cpu: i32) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 #fn_name(&#prog_ident, cpu);
             }
         }
@@ -451,6 +469,7 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name() -> i32 {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 #fn_name(&#prog_ident)
             }
         }
@@ -474,6 +493,7 @@ impl SchedExt {
             extern "C" fn #entry_name(
                 info: *const ::rex::sched_ext::ScxExitInfo,
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let info_ref = unsafe { &*info };
                 #fn_name(&#prog_ident, info_ref);
             }
@@ -499,6 +519,7 @@ impl SchedExt {
                 p: *mut (),
                 args: *const ::rex::sched_ext::ScxInitTaskArgs,
             ) -> i32 {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 let args_ref = unsafe { &*args };
                 #fn_name(&#prog_ident, &task, args_ref)
@@ -525,6 +546,7 @@ impl SchedExt {
                 p: *mut (),
                 args: *const ::rex::sched_ext::ScxExitTaskArgs,
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 let args_ref = unsafe { &*args };
                 #fn_name(&#prog_ident, &task, args_ref);
@@ -551,6 +573,7 @@ impl SchedExt {
                 from: *mut (),
                 to: *mut (),
             ) -> bool {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let from_task = unsafe { sched_ext::convert_task(from as *mut _) };
                 let to_task = if to.is_null() {
                     None
@@ -581,6 +604,7 @@ impl SchedExt {
                 a: *mut (),
                 b: *mut (),
             ) -> bool {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task_a = unsafe { sched_ext::convert_task(a as *mut _) };
                 let task_b = unsafe { sched_ext::convert_task(b as *mut _) };
                 #fn_name(&#prog_ident, &task_a, &task_b)
@@ -607,6 +631,7 @@ impl SchedExt {
                 p: *mut (),
                 cpumask: *const (),
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, cpumask);
             }
@@ -632,6 +657,7 @@ impl SchedExt {
                 cpu: i32,
                 args: *const (),
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 #fn_name(&#prog_ident, cpu, args);
             }
         }
@@ -656,6 +682,7 @@ impl SchedExt {
                 cpu: i32,
                 args: *const (),
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 #fn_name(&#prog_ident, cpu, args);
             }
         }
@@ -677,6 +704,7 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(ctx: *const ()) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 #fn_name(&#prog_ident, ctx);
             }
         }
@@ -702,6 +730,7 @@ impl SchedExt {
                 cpu: i32,
                 idle: bool,
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 #fn_name(&#prog_ident, ctx, cpu, idle);
             }
         }
@@ -726,6 +755,7 @@ impl SchedExt {
                 ctx: *const (),
                 p: *mut (),
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, ctx, &task);
             }
@@ -751,6 +781,7 @@ impl SchedExt {
                 cgrp: *mut (),
                 args: *const ::rex::sched_ext::ScxCgroupInitArgs,
             ) -> i32 {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let args_ref = unsafe { &*args };
                 #fn_name(&#prog_ident, cgrp, args_ref)
             }
@@ -773,6 +804,7 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(cgrp: *mut ()) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 #fn_name(&#prog_ident, cgrp);
             }
         }
@@ -799,6 +831,7 @@ impl SchedExt {
                 from: *mut (),
                 to: *mut (),
             ) -> i32 {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, from, to)
             }
@@ -826,6 +859,7 @@ impl SchedExt {
                 from: *mut (),
                 to: *mut (),
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, from, to);
             }
@@ -853,6 +887,7 @@ impl SchedExt {
                 from: *mut (),
                 to: *mut (),
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
                 #fn_name(&#prog_ident, &task, from, to);
             }
@@ -878,6 +913,7 @@ impl SchedExt {
                 cgrp: *mut (),
                 weight: u32,
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 #fn_name(&#prog_ident, cgrp, weight);
             }
         }
@@ -905,6 +941,7 @@ impl SchedExt {
                 quota_us: u64,
                 burst_us: u64,
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 #fn_name(&#prog_ident, cgrp, period_us, quota_us, burst_us);
             }
         }
@@ -929,6 +966,7 @@ impl SchedExt {
                 cgrp: *mut (),
                 idle: bool,
             ) {
+                let _rex_op_guard = unsafe { ::rex::sched_ext::RexOpGuard::enter() };
                 #fn_name(&#prog_ident, cgrp, idle);
             }
         }

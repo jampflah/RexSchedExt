@@ -56,6 +56,7 @@ KSYM_FUNC(scx_bpf_task_set_slice)
 KSYM_FUNC(scx_bpf_task_set_dsq_vtime)
 KSYM_FUNC(scx_bpf_reenqueue_local)
 KSYM_FUNC(scx_bpf_nr_cpu_ids)
+KSYM_FUNC(rex_scx_report_stall)
 
 // Global variables
 unsigned long jiffies;
@@ -67,3 +68,5 @@ int cpu_number;
 unsigned char rex_termination_state;
 unsigned long this_cpu_off;
 char *rex_log_buf;
+unsigned long long rex_op_entry_jiffies;
+unsigned long rex_op_timeout_jiffies;
