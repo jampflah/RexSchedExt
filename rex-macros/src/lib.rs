@@ -109,7 +109,11 @@ pub fn rex_sched_ext_ops(_: TokenStream, item: TokenStream) -> TokenStream {
     let item: ItemStatic = syn::parse(item).unwrap();
     let name = item.ident.to_string();
     let section_name: Cow<'_, _> = ".struct_ops".to_string().into();
+    // NOTE: `#[used]` is required. Without it, LTO drops the static
+    // because nothing in the Rust program references it — librex reads
+    // its bytes out of the ELF, not through a symbol reference.
     (quote! {
+        #[used]
         #[unsafe(link_section = #section_name)]
         #[unsafe(export_name = #name)]
         #[allow(non_upper_case_globals)]

@@ -287,6 +287,7 @@ private:
     uint64_t flags = 0;
     uint32_t timeout_ms = 0;
     uint32_t exit_dump_len = 0;
+    char     name[128] = {0};
   } sched_ext_ops_cfg;
 
   int parse_scns();
@@ -493,14 +494,25 @@ int rex_obj::parse_progs() {
           Elf64_Addr base = elf64_getshdr(scn)->sh_addr;
           const uint8_t *p = reinterpret_cast<const uint8_t *>(scn_data->d_buf)
                              + sym->st_value - base;
-          memcpy(&sched_ext_ops_cfg.flags,        p + 0,  8);
-          memcpy(&sched_ext_ops_cfg.timeout_ms,   p + 8,  4);
+          // struct SchedExtOps layout from rex/src/sched_ext/binding.rs:
+          //   flags: u64            @ 0   (8 B)
+          //   timeout_ms: u32       @ 8   (4 B)
+          //   exit_dump_len: u32    @ 12  (4 B)
+          //   name: [u8; 128]       @ 16  (128 B)
+          memcpy(&sched_ext_ops_cfg.flags,         p + 0,  8);
+          memcpy(&sched_ext_ops_cfg.timeout_ms,    p + 8,  4);
           memcpy(&sched_ext_ops_cfg.exit_dump_len, p + 12, 4);
+          if (sym->st_size >= 16 + sizeof(sched_ext_ops_cfg.name)) {
+            memcpy(sched_ext_ops_cfg.name, p + 16,
+                   sizeof(sched_ext_ops_cfg.name));
+            sched_ext_ops_cfg.name[sizeof(sched_ext_ops_cfg.name) - 1] = '\0';
+          }
           if (debug)
             std::clog << "sched_ext ops: flags=0x" << std::hex
                       << sched_ext_ops_cfg.flags << std::dec
                       << " timeout_ms=" << sched_ext_ops_cfg.timeout_ms
                       << " exit_dump_len=" << sched_ext_ops_cfg.exit_dump_len
+                      << " name=\"" << sched_ext_ops_cfg.name << "\""
                       << std::endl;
         }
       }
@@ -821,6 +833,11 @@ int rex_obj::attach_sched_ext() {
   attr.sched_ext_attach.ops_flags         = sched_ext_ops_cfg.flags;
   attr.sched_ext_attach.timeout_ms        = sched_ext_ops_cfg.timeout_ms;
   attr.sched_ext_attach.exit_dump_len     = sched_ext_ops_cfg.exit_dump_len;
+  static_assert(sizeof(attr.sched_ext_attach.name) ==
+                sizeof(sched_ext_ops_cfg.name),
+                "UAPI name[128] must match SchedExtOps::name size");
+  memcpy(attr.sched_ext_attach.name, sched_ext_ops_cfg.name,
+         sizeof(attr.sched_ext_attach.name));
 
   int ret = bpf(BPF_SCHED_EXT_ATTACH_REX, &attr, sizeof(attr));
   if (ret < 0) {
