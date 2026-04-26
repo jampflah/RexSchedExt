@@ -9,6 +9,34 @@ use rex::{rex_printk, rex_sched_ext, rex_sched_ext_ops};
 
 const SHARED_DSQ: u64 = 0;
 
+// ---------------------------------------------------------------------------
+// Watchdog stall test
+//
+// Set STALL_MODE below to deliberately break the scheduler and observe
+// sched_ext's safety net kick in. With the default 30000 ms watchdog timeout,
+// the kernel should log:
+//
+//   sched_ext: watchdog tick (checking all CPUs)
+//   sched_ext: watchdog detected timeout on CPU N!
+//   sched_ext: BPF scheduler "simple" errored, disabling
+//   sched_ext: runnable task stall (<comm>[pid] failed to run for ...)
+//
+// and every task is switched back to CFS. After that you can Ctrl-C the
+// loader and the "detach" log lines are basically a no-op because the
+// scheduler already self-unregistered.
+//
+// STALL_MODE selects *how* to break:
+//   0 = no stall (normal scheduler, the default)
+//   1 = soft stall: dispatch() stops pulling from SHARED_DSQ, so enqueued
+//       tasks sit forever. This is the branch that triggers
+//       SCX_EXIT_ERROR_STALL cleanly via check_rq_for_timeouts().
+//   2 = hard stall: infinite spin *inside* dispatch(). Hangs the CPU
+//       running dispatch; on a small VM the kernel's soft-lockup or
+//       RCU-stall detector will usually fire before scx's watchdog has
+//       a chance to react.
+const STALL_MODE: u32 = 0;
+// ---------------------------------------------------------------------------
+
 /// Pick a CPU for a waking task. If the default selection finds an idle
 /// CPU, dispatch directly to the local DSQ to skip the enqueue path.
 #[rex_sched_ext(callback = "select_cpu")]
@@ -41,8 +69,28 @@ fn simple_dispatch(
     _cpu: i32,
     _prev: Option<&TaskStruct>,
 ) {
-    rex_printk!("[scx_simple] dispatch: cpu={} pulling from shared DSQ\n", _cpu).ok();
-    obj.scx_bpf_dsq_move_to_local(SHARED_DSQ);
+    match STALL_MODE {
+        // Normal operation.
+        0 => {
+            rex_printk!("[scx_simple] dispatch: cpu={} pulling from shared DSQ\n", _cpu).ok();
+            obj.scx_bpf_dsq_move_to_local(SHARED_DSQ);
+        }
+        // Soft stall: never pull from SHARED_DSQ, so everything piles up.
+        // This is the code path that trips SCX_EXIT_ERROR_STALL in
+        // linux/kernel/sched/ext.c:check_rq_for_timeouts().
+        1 => {
+            rex_printk!("[scx_simple] dispatch: cpu={} STALL_MODE=1 (not dispatching)\n", _cpu).ok();
+        }
+        // Hard stall: spin forever inside the callback.
+        // Note: this hangs the CPU that runs dispatch() and usually
+        // tickles the soft-lockup detector before scx's watchdog.
+        _ => {
+            rex_printk!("[scx_simple] dispatch: cpu={} STALL_MODE=2 (spinning forever)\n", _cpu).ok();
+            loop {
+                core::hint::spin_loop();
+            }
+        }
+    }
 }
 
 /// Called once when the scheduler is loaded. Creates the shared DSQ.
