@@ -1,0 +1,40 @@
+# Expected trace for scx_vtime under the runtest's default workload.
+#
+# Format (one rule per line; blank lines and `#` comments are ignored):
+#   <regex>      MUST match at least once  (default)
+#   +<regex>     same, explicit form
+#   !<regex>     MUST NOT match anywhere in the captured window
+#
+# The capture is the union of `dmesg` + ftrace `trace`. Order is not
+# enforced; one-shot init lines are protected by an early trace snapshot
+# in runtest.py.
+
+# --- sched_ext kernel-side lifecycle ---
+sched_ext: BPF scheduler "vtime" enabled
+sched_ext: BPF scheduler "vtime" disabled
+
+# --- §2.3: VTIME_DSQ create round-trip ---
+\[scx_vtime\] init: BEGIN
+\[scx_vtime\] init: created VTIME_DSQ id=0
+\[scx_vtime\] init: END
+
+# --- §2.1: vtime insert (args-struct ABI) + §2.7 task_set_dsq_vtime ---
+# `task_set_dsq_vtime` returns true on success; `insert_vtime_args` is
+# the bool-returning args-struct ABI variant. v1 `scx_bpf_dsq_insert_vtime`
+# is exercised by every subsequent enqueue (no log line per call to keep
+# the trace size bounded).
+\[scx_vtime\] enqueue: first-call vtime=[0-9]+ task_set_dsq_vtime=true insert_vtime_args=true
+
+# --- dispatch must observe the vtime DSQ ---
+\[scx_vtime\] dispatch: first-call cpu=[0-9]+ VTIME_DSQ.nr_queued=[0-9]+
+
+# --- exit + final vtime fingerprint ---
+\[scx_vtime\] exit: NEXT_VTIME=[0-9]+ \(vtimes assigned across this attach\)
+\[scx_vtime\] exit: scheduler is being unloaded
+
+# --- Forbidden: regressions we explicitly guard against ---
+!scx_disable_rex returned -ENOENT
+# Only the user-initiated detach should disable the scheduler:
+!sched_ext: BPF scheduler "vtime" (errored, disabling|disabled \((runtime error|runnable task stall)\))
+!sched_ext: runnable task stall
+!\[scx_vtime\] init: FATAL
