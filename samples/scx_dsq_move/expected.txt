@@ -1,0 +1,45 @@
+# Expected trace for scx_dsq_move under the runtest's default workload.
+#
+# Format (one rule per line; blank lines and `#` comments are ignored):
+#   <regex>      MUST match at least once  (default)
+#   +<regex>     same, explicit form
+#   !<regex>     MUST NOT match anywhere in the captured window
+#
+# The capture is the union of `dmesg` + ftrace `trace`. Order is not
+# enforced; one-shot init/dispatch lines are protected by the early
+# trace snapshot in runtest.py.
+
+# --- sched_ext kernel-side lifecycle ---
+sched_ext: BPF scheduler "dsqmov" enabled
+sched_ext: BPF scheduler "dsqmov" disabled
+
+# --- §2.3: SOURCE + SINK DSQ creation ---
+\[scx_dsq_move\] init: BEGIN
+\[scx_dsq_move\] init: created SOURCE=0xcafe0001 SINK=0xcafe0002
+\[scx_dsq_move\] init: END
+
+# --- §2.2: peek + iterator + move kfunc family (one-shot from dispatch) ---
+# The line bundles eight invariants:
+#   * peek_pid > 0            (SOURCE_DSQ was non-empty when smoke fired)
+#   * iter_first_pid > 0      (iterator yielded at least one task)
+#   * peek_match=true         (peek and iterator agree on the head task)
+#   * iter_count >= 1         (BpfIterScxDsq next/destroy lifecycle ok)
+#   * moved >= 1              (at least one move/move_vtime succeeded)
+#   * src_post == src_pre - moved   (every moved task left SOURCE)
+#   * sink_post == moved      (every moved task arrived at SINK)
+# The runtest's prog-leak guard transitively asserts that
+# bpf_iter_scx_dsq_destroy ran on Drop without leaking the iterator.
+\[scx_dsq_move\] dispatch: peek_pid=[0-9]+ iter_first_pid=[0-9]+ peek_match=true iter_count=[0-9]+ moved=[0-9]+ src_pre=[0-9]+ src_post=[0-9]+ sink_post=[0-9]+
+
+\[scx_dsq_move\] exit: scheduler is being unloaded
+
+# --- Forbidden: regressions we explicitly guard against ---
+!scx_disable_rex returned -ENOENT
+# Only the user-initiated detach should disable the scheduler:
+!sched_ext: BPF scheduler "dsqmov" (errored, disabling|disabled \((runtime error|runnable task stall)\))
+!sched_ext: runnable task stall
+!\[scx_dsq_move\] init: FATAL
+# Iterator construction must not have failed:
+!\[scx_dsq_move\] dispatch: BpfIterScxDsq::new FAILED
+# Peek must agree with iterator's first yield:
+!\[scx_dsq_move\] dispatch: peek_pid=[0-9]+ iter_first_pid=[0-9]+ peek_match=false

@@ -187,11 +187,24 @@ fn smoke_enqueue(obj: &sched_ext, p: &TaskStruct, enq_flags: u64) {
     if FIRST_ENQUEUE.swap(false, Ordering::Relaxed) {
         let locked = obj.scx_bpf_locked_rq().is_some();
         let task_cpu = obj.scx_bpf_task_cpu(p);
+        // §2.1: route the first enqueue through the v2 (bool-returning)
+        // ABI so we exercise both `scx_bpf_dsq_insert` (used below for
+        // every other enqueue) and `scx_bpf_dsq_insert___v2` in one
+        // attach. v2 returns false only when scx_root has detached, which
+        // shouldn't happen during a normal enqueue.
+        let v2_ok = obj.scx_bpf_dsq_insert_v2(
+            p,
+            SHARED_DSQ,
+            SCX_SLICE_DFL,
+            enq_flags,
+        );
         rex_printk!(
-            "[scx_kfunc_smoke] enqueue: first-call locked_rq.is_some={} task_cpu={}\n",
+            "[scx_kfunc_smoke] enqueue: first-call locked_rq.is_some={} task_cpu={} dsq_insert_v2={}\n",
             locked,
-            task_cpu
+            task_cpu,
+            v2_ok
         ).ok();
+        return;
     }
     obj.scx_bpf_dsq_insert(p, SHARED_DSQ, SCX_SLICE_DFL, enq_flags);
 }

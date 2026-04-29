@@ -32,8 +32,10 @@ sched_ext: BPF scheduler "kfsmoke" disabled
 \[scx_kfunc_smoke\] cpu=0 node=0 cpu_curr.is_some=(true|false)
 \[scx_kfunc_smoke\] cpu_rq\(0\).is_some=true \(kfunc is deprecated; one-shot\)
 
-# --- §2.6: locked_rq inside an SCX callback (one-shot from enqueue) ---
-\[scx_kfunc_smoke\] enqueue: first-call locked_rq.is_some=true task_cpu=[0-9]+
+# --- §2.6: locked_rq inside an SCX callback + §2.1 v2 insert ABI ---
+# The first enqueue tests `scx_bpf_dsq_insert_v2` (bool-returning ABI)
+# instead of the v1 `scx_bpf_dsq_insert` used by every subsequent call.
+\[scx_kfunc_smoke\] enqueue: first-call locked_rq.is_some=true task_cpu=[0-9]+ dsq_insert_v2=true
 
 # --- §2.8: dispatch context controls ---
 # Both kfuncs require ops.dispatch() context (SCX_KF_DISPATCH = 0x2).
