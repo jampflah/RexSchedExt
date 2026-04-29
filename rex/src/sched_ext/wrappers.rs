@@ -158,27 +158,72 @@ impl Rq {
     }
 }
 
+/// Backing-buffer size for [`ScxEventStats`], in bytes.
+///
+/// The kernel-side `struct scx_event_stats` is composed entirely of `s64`
+/// counters (see `linux/kernel/sched/ext_internal.h`). We allocate a fixed
+/// 256-byte buffer (32 × `i64`) which is roughly 3.5× the current kernel
+/// layout's size — enough headroom that adding new counters upstream
+/// won't silently truncate our snapshot. `scx_bpf_events` always writes
+/// at most `events_sz` bytes, so over-allocation is safe.
+pub const SCX_EVENT_STATS_BUF_BYTES: usize = 256;
+
+const _: () = assert!(
+    SCX_EVENT_STATS_BUF_BYTES % core::mem::size_of::<i64>() == 0,
+    "ScxEventStats buffer must be a whole number of i64 counters",
+);
+
+const SCX_EVENT_STATS_BUF_LEN_I64: usize =
+    SCX_EVENT_STATS_BUF_BYTES / core::mem::size_of::<i64>();
+
+/// Caller-owned buffer for `scx_bpf_events`. Construct with
+/// [`ScxEventStats::zeroed`], hand to the kfunc, then read counters via
+/// [`ScxEventStats::as_i64_slice`].
+///
+/// `scx_event_stats` is intentionally opaque to Rex (the kernel struct is
+/// not in our bindgen surface), so the wrapper holds a fixed-size aligned
+/// `i64` array rather than a typed reference. Zero-initialising on
+/// construction lets `as_i64_slice` be a safe call regardless of whether
+/// the kfunc has run yet, at the cost of one 256-byte stack memset.
+#[repr(C, align(8))]
 pub struct ScxEventStats {
-    #[allow(dead_code)]
-    inner: &'static scx_event_stats,
-    kptr: *mut scx_event_stats,
+    /// Aligned-to-`i64` array; the kernel writes its `scx_event_stats`
+    /// representation into the leading bytes via `scx_bpf_events`.
+    /// Initialised to all-zeros so reads before the kfunc runs (or for
+    /// counters the kernel doesn't populate) are defined.
+    buf: [i64; SCX_EVENT_STATS_BUF_LEN_I64],
 }
 
 impl ScxEventStats {
-    /// # Safety
-    /// `ptr` must be a valid `scx_event_stats *` that outlives the wrapper
-    /// and points to a buffer at least `size_of::<scx_event_stats>()` bytes.
+    /// Allocate a zero-initialised counter buffer suitable for passing
+    /// to `scx_bpf_events`.
     #[inline(always)]
-    pub(crate) unsafe fn from_raw(ptr: *mut scx_event_stats) -> Self {
-        ScxEventStats {
-            inner: unsafe { &*ptr },
-            kptr: ptr,
+    pub fn zeroed() -> Self {
+        Self {
+            buf: [0i64; SCX_EVENT_STATS_BUF_LEN_I64],
         }
     }
 
+    /// Buffer size in bytes (the value passed to `scx_bpf_events` as
+    /// `events_sz`). Always equals [`SCX_EVENT_STATS_BUF_BYTES`].
+    #[inline(always)]
+    pub const fn size_bytes() -> usize {
+        SCX_EVENT_STATS_BUF_BYTES
+    }
+
+    /// Raw pointer for the `scx_bpf_events` kfunc.
     #[inline(always)]
     pub fn as_mut_ptr(&mut self) -> *mut scx_event_stats {
-        self.kptr
+        self.buf.as_mut_ptr() as *mut scx_event_stats
+    }
+
+    /// View the buffer as a slice of `i64` counters. After
+    /// `scx_bpf_events` has populated the buffer, the leading entries
+    /// match the kernel's `struct scx_event_stats` field order; trailing
+    /// entries the kernel didn't touch remain zero.
+    #[inline(always)]
+    pub fn as_i64_slice(&self) -> &[i64] {
+        &self.buf
     }
 }
 

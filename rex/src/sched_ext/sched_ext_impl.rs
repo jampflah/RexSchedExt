@@ -589,21 +589,22 @@ impl sched_ext {
     }
 
     /// Snapshot the scheduler's event counters into `events`.
-    /// The buffer must be at least `core::mem::size_of::<scx_event_stats>()`
-    /// bytes, but since `scx_event_stats` is opaque to Rex this method is
-    /// `unsafe` and takes the byte size from the caller.
     ///
-    /// # Safety
-    /// `events` must point to a buffer of `events_sz` bytes that the caller
-    /// holds a unique reference to for the duration of the call.
+    /// `ScxEventStats` owns a fixed-size aligned buffer (see
+    /// [`ScxEventStats::size_bytes`]) which is large enough for the
+    /// kernel's current `struct scx_event_stats` and any near-future
+    /// growth, so the caller doesn't need to plumb a size through.
+    ///
+    /// After this returns, read counters via
+    /// `unsafe { events.as_i64_slice() }` (the slice contents are only
+    /// initialised by this kfunc).
     #[inline(always)]
-    pub unsafe fn scx_bpf_events(
-        &self,
-        events: &mut ScxEventStats,
-        events_sz: usize,
-    ) {
+    pub fn scx_bpf_events(&self, events: &mut ScxEventStats) {
         termination_check!(unsafe {
-            ffi::scx_bpf_events(events.as_mut_ptr(), events_sz)
+            ffi::scx_bpf_events(
+                events.as_mut_ptr(),
+                ScxEventStats::size_bytes(),
+            )
         })
     }
 
