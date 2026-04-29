@@ -228,8 +228,35 @@ impl ScxEventStats {
 }
 
 /// RAII handle around the BPF DSQ iterator.
-/// Construct with [`BpfIterScxDsq::new`]; iterate via the [`Iterator`] impl
-/// (which calls `bpf_iter_scx_dsq_next`); destruction is automatic on Drop.
+///
+/// **Self-referential by construction.** `bpf_iter_scx_dsq_new` writes
+/// pointers _back into_ the iterator's own bytes (via
+/// `INIT_DSQ_LIST_CURSOR(kit->cursor, ...)` which uses `LIST_HEAD_INIT`
+/// and stores `&kit->cursor.node` into `kit->cursor.node.{next,prev}`).
+/// Once `iter_new` has been called the iterator MUST NOT be moved -- a
+/// later `bpf_iter_scx_dsq_next` will dereference the now-stale
+/// self-pointers and either spin a bogus list walk or corrupt memory.
+///
+/// To enforce that, the public API is split into two phases:
+///
+///   1. [`BpfIterScxDsq::uninit`] is a `const fn` that produces a zeroed
+///      iterator without invoking any kfunc. Construct it at the final
+///      stack location it'll live at for the rest of its lifetime.
+///   2. [`BpfIterScxDsq::open`] takes `&mut self` and is the only entry
+///      point that calls `bpf_iter_scx_dsq_new`. By taking `&mut self`
+///      it is guaranteed to be invoked _through_ a stable address
+///      (the caller's pin point) -- the self-pointers the kernel writes
+///      reference that stable address.
+///
+/// Once opened, iterate via the [`Iterator`] impl; Drop calls
+/// `bpf_iter_scx_dsq_destroy` automatically.
+///
+/// ```ignore
+/// let mut it = BpfIterScxDsq::uninit();   // pinned in caller's frame
+/// it.open(SOURCE_DSQ, 0)?;                // kernel call uses final address
+/// while let Some(t) = it.next() { /* ... */ }
+/// // it drops here -> bpf_iter_scx_dsq_destroy
+/// ```
 pub struct BpfIterScxDsq {
     it: bpf_iter_scx_dsq,
     /// Set once `bpf_iter_scx_dsq_new` has succeeded so Drop knows it must
@@ -239,20 +266,41 @@ pub struct BpfIterScxDsq {
 }
 
 impl BpfIterScxDsq {
-    /// Build a fresh iterator over `dsq_id`. Returns `Err(rc)` (a negative
-    /// errno from the kernel) on failure; the iterator is not usable.
+    /// Allocate an uninitialized iterator slot. Does NOT call any kfunc;
+    /// the iterator is unusable until [`open`] succeeds.
+    ///
+    /// [`open`]: BpfIterScxDsq::open
     #[inline(always)]
-    pub fn new(dsq_id: u64, flags: u64) -> core::result::Result<Self, i32> {
-        let mut this = BpfIterScxDsq {
+    pub const fn uninit() -> Self {
+        Self {
             it: bpf_iter_scx_dsq { __opaque: [0u64; 6] },
             initialized: false,
-        };
+        }
+    }
+
+    /// Initialize the iterator over `dsq_id`. Must be called on `&mut self`
+    /// at the same address the iterator will be used at -- typically the
+    /// caller's stack slot from [`uninit`]. Returns `Err(rc)` (negative
+    /// errno) on failure; in that case the iterator stays uninitialized
+    /// and Drop will not call `bpf_iter_scx_dsq_destroy`.
+    ///
+    /// [`uninit`]: BpfIterScxDsq::uninit
+    #[inline(always)]
+    pub fn open(
+        &mut self,
+        dsq_id: u64,
+        flags: u64,
+    ) -> core::result::Result<(), i32> {
         let rc = unsafe {
-            ffi::bpf_iter_scx_dsq_new(&mut this.it as *mut _, dsq_id, flags)
+            ffi::bpf_iter_scx_dsq_new(
+                &mut self.it as *mut _,
+                dsq_id,
+                flags,
+            )
         };
         if rc == 0 {
-            this.initialized = true;
-            Ok(this)
+            self.initialized = true;
+            Ok(())
         } else {
             Err(rc)
         }
