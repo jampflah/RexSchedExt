@@ -22,6 +22,33 @@ Authoritative inventories used to build this plan:
 
 ---
 
+## Status — 2026-04-29
+
+| Stage | Sample(s)                                              | State        | Commits                                |
+| ----- | ------------------------------------------------------ | ------------ | -------------------------------------- |
+| 1     | `scx_simple`                                           | ✅ done      | `38794a5`                              |
+| 2     | `scx_kfunc_smoke` (+ `ScxEventStats` safe API)         | ✅ done      | `cba8894`, `2618f63`                   |
+| 3     | `scx_vtime`, `scx_dsq_move` (+ `BpfIterScxDsq` rework) | ✅ done      | `03d5b1d`, `40ddd23`, `5c626db`        |
+| 4     | `scx_select`, `scx_cpuperf`                            | ⏳ pending   |                                        |
+| 5     | `scx_lifecycle` / `scx_runstate` / `scx_yield` / `scx_dequeue` / `scx_idle` / `scx_weight_mask` / `scx_core_sched` / `scx_cpu_hotplug` | ⏳ pending |   |
+| 6     | `scx_cgroup` (gated on `CONFIG_EXT_GROUP_SCHED=y`)     | ⏳ pending   |                                        |
+| 7     | `scx_dump`, `scx_error`                                | ⏳ pending   |                                        |
+| 8     | Negative tests (§3)                                    | ⏳ pending   |                                        |
+| –     | `scripts/ci/scx-test.sh` + coverage gate (§5)          | ⏳ pending   |                                        |
+
+**Coverage today: 32 / 49 kfuncs (~65%), 5 / 27 callbacks (~19%), 4 samples wired into `meson test`.**
+
+**Real bugs the harness surfaced and fixed:**
+
+1. `samples/scx_simple` shipped with `STALL_MODE = 1` (the soft-stall negative path) instead of `0`. The first end-to-end run of the new harness exposed the watchdog-disable pattern in `dmesg`. Fixed in commit `38794a5`.
+2. `BpfIterScxDsq::new() -> Result<Self, _>` returned a self-referential 48 B struct by value. The kernel's `INIT_DSQ_LIST_CURSOR` writes `&kit->cursor.node` into `kit->cursor.node.{next,prev}`; after Rust moved the struct into the caller's slot those embedded pointers became stale, so the first `next()` call walked freed stack memory while holding `dsq->lock` and wedged the entire guest. Replaced the API with `BpfIterScxDsq::uninit()` (const, no kfunc) + `BpfIterScxDsq::open(&mut self, ...)` so the kernel's self-pointers reference the caller's stable stack address. Fixed in commit `03d5b1d`.
+
+**API gaps closed:**
+
+- `ScxEventStats` now has a safe `zeroed()` constructor and `as_i64_slice()` accessor; `scx_bpf_events` is no longer `unsafe fn`. Commit `cba8894`.
+
+---
+
 ## 0. Test harness conventions
 
 Each test is a Rex sample under `samples/scx_<name>/` with the same shape as
@@ -220,14 +247,19 @@ result.
 
 These are not "every kfunc must work" — they verify Rex's safety nets:
 
-- **Stall detection** (already in `scx_simple` `STALL_MODE = 1`): asserts the
-  watchdog disables the scheduler and Rex's disable path doesn't leak.
-  Reference: [rex-watchdog-disable-leak.md](rex-watchdog-disable-leak.md).
-  Verification step: rerun 10x and check `bpftool prog show` count returns to
-  baseline after each cycle.
+- **Stall detection** (`STALL_MODE = 1` path): asserts the watchdog disables
+  the scheduler and Rex's disable path doesn't leak. Reference:
+  [rex-watchdog-disable-leak.md](rex-watchdog-disable-leak.md). Note: the
+  `STALL_MODE` constant was removed from `scx_simple` after commit `38794a5`
+  so the baseline harness has a deterministic green run; the negative test
+  now needs its own sibling sample (`scx_simple_stall_soft`) whose
+  `expected.txt` *requires* the watchdog-disable lines instead of forbidding
+  them. Verification step: rerun 10× and check `bpftool prog show` count
+  returns to baseline after each cycle.
 - **Hard spin in callback** (`STALL_MODE = 2`): asserts the per-CPU Rex
   watchdog ([linux/kernel/bpf/rex.c:78](../linux/kernel/bpf/rex.c#L78))
-  triggers `rex_terminate()` within ~20 s.
+  triggers `rex_terminate()` within ~20 s. Same split as above — lives in
+  `scx_simple_stall_hard`.
 - **Bad `scx_bpf_create_dsq`** (`scx_dsq_dup`): create the same DSQ id twice;
   expect `Err(-EEXIST)` from the wrapper.
 - **`scx_bpf_destroy_dsq` of unknown id**: expect no crash; subsequent
@@ -242,23 +274,27 @@ These are not "every kfunc must work" — they verify Rex's safety nets:
 
 Stage the work bottom-up so a failure in stage N blocks stage N+1:
 
-1. **Smoke** — extend `scx_simple` to log every callback it already
-   implements, confirm no regression after recent commits
-   (`399c84b`, `3e85708`).
-2. **Read-only kfuncs** — build `scx_kfunc_smoke` (sections 2.5, 2.6.cpu_*,
-   2.8, 2.11). No scheduling decisions changed; risk-free.
-3. **DSQ machinery** — `scx_dsq_move`, `scx_vtime`. Validates iterator
-   `Drop` and the args-struct ABI variants (these are most likely to mismatch
-   the kernel ABI and silently corrupt the BPF stack — watch for verifier
-   rejections at attach time).
-4. **CPU selection** — `scx_select` + `scx_cpuperf`.
-5. **Lifecycle / runstate / yield / dequeue / hotplug** — covers most of the
-   remaining callbacks.
-6. **cgroup** — gated, last because it requires kernel config `CONFIG_EXT_GROUP_SCHED=y`.
-7. **Dump & error paths** — `scx_dump`, `scx_error`. Run after every other
-   sample is green so dumps capture a known-good baseline.
-8. **Negative tests (Section 3)** — last. Some leave the kernel in a degraded
-   state; reboot the VM between runs.
+1. ✅ **Smoke** — `scx_simple` logs every callback it implements (commit
+   `38794a5`). The first end-to-end run of the harness caught a real
+   `STALL_MODE = 1` mis-default; fixed in the same commit.
+2. ✅ **Read-only kfuncs** — `scx_kfunc_smoke` covers §2.5, §2.6 cpu_\*,
+   §2.8, §2.11 plus §2.3 destroy + §2.1 v2 ABI (commits `cba8894`,
+   `2618f63`). The §2.5 `_node` getters are deferred to a sibling
+   per-node sample because they're mutually exclusive with the flat
+   getters via `SCX_OPS_BUILTIN_IDLE_PER_NODE`.
+3. ✅ **DSQ machinery** — `scx_vtime` (§2.1 vtime + §2.7
+   `task_set_dsq_vtime`) and `scx_dsq_move` (§2.2 peek + iterator + four
+   move helpers) (commits `40ddd23`, `5c626db`). Surfaced the
+   `BpfIterScxDsq` self-referential pointer bug; fix in commit `03d5b1d`.
+4. ⏳ **CPU selection** — `scx_select` + `scx_cpuperf`.
+5. ⏳ **Lifecycle / runstate / yield / dequeue / hotplug** — covers most of
+   the remaining callbacks.
+6. ⏳ **cgroup** — gated, last because it requires kernel config
+   `CONFIG_EXT_GROUP_SCHED=y`.
+7. ⏳ **Dump & error paths** — `scx_dump`, `scx_error`. Run after every
+   other sample is green so dumps capture a known-good baseline.
+8. ⏳ **Negative tests (Section 3)** — last. Some leave the kernel in a
+   degraded state; reboot the VM between runs.
 
 ---
 
