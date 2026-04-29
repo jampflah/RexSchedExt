@@ -273,7 +273,18 @@ Add a `scripts/ci/scx-test.sh` that:
 3. Diffs the captured dmesg trace against `samples/<sample>/expected.txt`.
 4. Asserts `bpftool prog show | wc -l` is identical before and after the
    suite (catches the watchdog leak regression).
+5. **Coverage gate.** Greps every `pub fn scx_bpf_*` in
+   [rex/src/sched_ext/sched_ext_impl.rs](../rex/src/sched_ext/sched_ext_impl.rs)
+   and every `pub fn` on `BpfIterScxDsq` in
+   [rex/src/sched_ext/wrappers.rs](../rex/src/sched_ext/wrappers.rs) against
+   the union of all `samples/scx_*/expected.txt`. Any wrapper not
+   referenced by at least one expected.txt fails CI. This is the
+   mechanical enforcement of the "coverage matrix is the source-of-truth"
+   rule below: it makes it impossible to land a new wrapper without an
+   accompanying sample assertion.
 
 The kfunc coverage matrix above is the source-of-truth: any new wrapper
 added to [rex/src/sched_ext/sched_ext_impl.rs](../rex/src/sched_ext/sched_ext_impl.rs)
-must come with a row here and a sample assertion before it lands.
+must come with a row here and a sample assertion before it lands. Step 5
+of the CI hook above enforces this mechanically once
+`scripts/ci/scx-test.sh` is in place.

@@ -25,8 +25,9 @@ sched_ext: BPF scheduler "simple" disabled
 # --- Forbidden: regressions we explicitly guard against ---
 # Watchdog disable-leak (rex-watchdog-disable-leak.md):
 !scx_disable_rex returned -ENOENT
-# Stall path must not fire when STALL_MODE = 0:
-!sched_ext: BPF scheduler "simple" errored, disabling
+# Catch every wording the kernel uses to disable a sick scheduler.
+# Only "disabled (unregistered from user space)" should ever appear here.
+!sched_ext: BPF scheduler "simple" (errored, disabling|disabled \((runtime error|runnable task stall)\))
 !sched_ext: runnable task stall
 # Init must not fail:
 !\[scx_simple\] init: FAILED to create shared DSQ
