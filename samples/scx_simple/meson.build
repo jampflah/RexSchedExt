@@ -50,3 +50,41 @@ scx_simple_loader = executable(
   dependencies: [librex_dep, libbpf_dep, kernel_dep],
   pie: true
 )
+
+scx_simple_runtest = custom_target(
+  'scx_simple_runtest',
+  output: ['runtest.py'],
+  input: join_paths(meson.current_source_dir(), 'tests/runtest.py'),
+  command: ['cp', '@INPUT@', '@OUTPUT@'],
+)
+
+scx_simple_expected = custom_target(
+  'scx_simple_expected',
+  output: ['expected.txt'],
+  input: join_paths(meson.current_source_dir(), 'expected.txt'),
+  command: ['cp', '@INPUT@', '@OUTPUT@'],
+)
+
+runtest_deps += [
+  scx_simple_build,
+  scx_simple_loader,
+  scx_simple_runtest,
+  scx_simple_expected,
+]
+
+scx_simple_test_env = environment()
+scx_simple_test_env.set('SAMPLE_PATH', meson.current_build_dir())
+scx_simple_test_env.set('Q_SCRIPT',
+  join_paths(meson.project_source_root(), 'scripts/q-script/sanity-test-q')
+)
+scx_simple_test_env.set('KERNEL_PATH', kbuild_dir)
+
+test('scx_simple_test',
+  python3_bin,
+  args: [sanity_test_scripts],
+  env: scx_simple_test_env,
+  depends: runtest_deps,
+  is_parallel: false,
+  timeout: 180,
+  workdir: meson.current_build_dir(),
+)

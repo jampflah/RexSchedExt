@@ -1,0 +1,32 @@
+# Expected trace for scx_simple under STALL_MODE = 0.
+#
+# Format (one rule per line, blank lines and `#` comments are ignored):
+#   <regex>      MUST match at least once  (default)
+#   +<regex>     same, explicit form
+#   !<regex>     MUST NOT match anywhere in the captured window
+#
+# The capture is the union of `dmesg` output and the contents of
+# /sys/kernel/debug/tracing/trace, captured between scheduler attach and
+# the post-detach prog-count check. Order is not enforced; runtime
+# callbacks fire many times per second under load.
+
+# --- sched_ext kernel-side lifecycle (printk / dmesg) ---
+sched_ext: BPF scheduler "simple" enabled
+sched_ext: BPF scheduler "simple" disabled
+
+# --- Rex scheduler callbacks (rex_printk! -> ftrace) ---
+\[scx_simple\] init: creating shared DSQ \(id=0\)
+\[scx_simple\] init: shared DSQ created successfully
+\[scx_simple\] enqueue: pid=[0-9]+
+\[scx_simple\] dispatch: cpu=[0-9]+ pulling from shared DSQ
+\[scx_simple\] select_cpu: pid=[0-9]+ .* \(idle, direct dispatch\)
+\[scx_simple\] exit: scheduler is being unloaded
+
+# --- Forbidden: regressions we explicitly guard against ---
+# Watchdog disable-leak (rex-watchdog-disable-leak.md):
+!scx_disable_rex returned -ENOENT
+# Stall path must not fire when STALL_MODE = 0:
+!sched_ext: BPF scheduler "simple" errored, disabling
+!sched_ext: runnable task stall
+# Init must not fail:
+!\[scx_simple\] init: FAILED to create shared DSQ
