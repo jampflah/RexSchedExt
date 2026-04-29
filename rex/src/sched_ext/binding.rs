@@ -66,10 +66,79 @@ pub struct ScxExitTaskArgs {
 }
 
 /// Arguments passed to ops.cgroup_init()
+#[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ScxCgroupInitArgs {
     pub weight: u32,
+}
+
+/// Opaque kernel structs forwarded through sched_ext callbacks.
+/// Layout is intentionally unspecified — wrappers in `wrappers.rs` only
+/// hold typed pointers, never dereference fields.
+#[cfg(CONFIG_CGROUP_SCHED = "y")]
+#[repr(C)]
+pub struct cgroup {
+    _opaque: [u8; 0],
+}
+
+#[repr(C)]
+pub struct cpumask {
+    _opaque: [u8; 0],
+}
+
+#[repr(C)]
+pub struct scx_dump_ctx {
+    _opaque: [u8; 0],
+}
+
+#[repr(C)]
+pub struct scx_cpu_acquire_args {
+    _opaque: [u8; 0],
+}
+
+#[repr(C)]
+pub struct scx_cpu_release_args {
+    _opaque: [u8; 0],
+}
+
+#[repr(C)]
+pub struct rq {
+    _opaque: [u8; 0],
+}
+
+#[repr(C)]
+pub struct scx_event_stats {
+    _opaque: [u8; 0],
+}
+
+/// BPF-ABI exposed iterator handle. Six u64s aligned to 8.
+/// Caller allocates this on the BPF program stack and hands a `*mut`
+/// to the kernel via `bpf_iter_scx_dsq_new`.
+#[repr(C, align(8))]
+pub struct bpf_iter_scx_dsq {
+    pub __opaque: [u64; 6],
+}
+
+/// Args struct for `__scx_bpf_dsq_insert_vtime`.
+/// Layout mirrors `struct scx_bpf_dsq_insert_vtime_args` in
+/// `linux/kernel/sched/ext.c`. Part of the public BPF ABI.
+#[repr(C)]
+pub struct ScxBpfDsqInsertVtimeArgs {
+    pub dsq_id: u64,
+    pub slice: u64,
+    pub vtime: u64,
+    pub enq_flags: u64,
+}
+
+/// Args struct for `__scx_bpf_select_cpu_and`.
+/// Layout mirrors `struct scx_bpf_select_cpu_and_args` in
+/// `linux/kernel/sched/ext_idle.c`. Part of the public BPF ABI.
+#[repr(C)]
+pub struct ScxBpfSelectCpuAndArgs {
+    pub prev_cpu: i32,
+    pub wake_flags: u64,
+    pub flags: u64,
 }
 
 /// Metadata for the scheduler ops definition.

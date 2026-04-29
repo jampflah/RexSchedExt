@@ -608,7 +608,8 @@ impl SchedExt {
                 cpumask: *const (),
             ) {
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
-                #fn_name(&#prog_ident, &task, cpumask);
+                let mask = unsafe { sched_ext::convert_cpumask(cpumask as *const _) };
+                #fn_name(&#prog_ident, &task, &mask);
             }
         }
     }
@@ -632,7 +633,8 @@ impl SchedExt {
                 cpu: i32,
                 args: *const (),
             ) {
-                #fn_name(&#prog_ident, cpu, args);
+                let args_ref = unsafe { sched_ext::convert_cpu_acquire_args(args as *const _) };
+                #fn_name(&#prog_ident, cpu, &args_ref);
             }
         }
     }
@@ -656,7 +658,8 @@ impl SchedExt {
                 cpu: i32,
                 args: *const (),
             ) {
-                #fn_name(&#prog_ident, cpu, args);
+                let args_ref = unsafe { sched_ext::convert_cpu_release_args(args as *const _) };
+                #fn_name(&#prog_ident, cpu, &args_ref);
             }
         }
     }
@@ -677,7 +680,8 @@ impl SchedExt {
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(ctx: *const ()) {
-                #fn_name(&#prog_ident, ctx);
+                let ctx_ref = unsafe { sched_ext::convert_dump_ctx(ctx as *const _) };
+                #fn_name(&#prog_ident, &ctx_ref);
             }
         }
     }
@@ -702,7 +706,8 @@ impl SchedExt {
                 cpu: i32,
                 idle: bool,
             ) {
-                #fn_name(&#prog_ident, ctx, cpu, idle);
+                let ctx_ref = unsafe { sched_ext::convert_dump_ctx(ctx as *const _) };
+                #fn_name(&#prog_ident, &ctx_ref, cpu, idle);
             }
         }
     }
@@ -726,8 +731,9 @@ impl SchedExt {
                 ctx: *const (),
                 p: *mut (),
             ) {
+                let ctx_ref = unsafe { sched_ext::convert_dump_ctx(ctx as *const _) };
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
-                #fn_name(&#prog_ident, ctx, &task);
+                #fn_name(&#prog_ident, &ctx_ref, &task);
             }
         }
     }
@@ -742,17 +748,20 @@ impl SchedExt {
         section_name: &str,
     ) -> TokenStream {
         quote! {
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[used]
             static #prog_ident: sched_ext = unsafe { sched_ext::new() };
 
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
                 cgrp: *mut (),
                 args: *const ::rex::sched_ext::ScxCgroupInitArgs,
             ) -> i32 {
+                let cgrp_ref = unsafe { sched_ext::convert_cgroup(cgrp as *mut _) };
                 let args_ref = unsafe { &*args };
-                #fn_name(&#prog_ident, cgrp, args_ref)
+                #fn_name(&#prog_ident, &cgrp_ref, args_ref)
             }
         }
     }
@@ -767,13 +776,16 @@ impl SchedExt {
         section_name: &str,
     ) -> TokenStream {
         quote! {
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[used]
             static #prog_ident: sched_ext = unsafe { sched_ext::new() };
 
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(cgrp: *mut ()) {
-                #fn_name(&#prog_ident, cgrp);
+                let cgrp_ref = unsafe { sched_ext::convert_cgroup(cgrp as *mut _) };
+                #fn_name(&#prog_ident, &cgrp_ref);
             }
         }
     }
@@ -789,9 +801,11 @@ impl SchedExt {
         section_name: &str,
     ) -> TokenStream {
         quote! {
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[used]
             static #prog_ident: sched_ext = unsafe { sched_ext::new() };
 
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
@@ -800,7 +814,9 @@ impl SchedExt {
                 to: *mut (),
             ) -> i32 {
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
-                #fn_name(&#prog_ident, &task, from, to)
+                let from_cg = unsafe { sched_ext::convert_cgroup(from as *mut _) };
+                let to_cg = unsafe { sched_ext::convert_cgroup(to as *mut _) };
+                #fn_name(&#prog_ident, &task, &from_cg, &to_cg)
             }
         }
     }
@@ -816,9 +832,11 @@ impl SchedExt {
         section_name: &str,
     ) -> TokenStream {
         quote! {
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[used]
             static #prog_ident: sched_ext = unsafe { sched_ext::new() };
 
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
@@ -827,7 +845,9 @@ impl SchedExt {
                 to: *mut (),
             ) {
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
-                #fn_name(&#prog_ident, &task, from, to);
+                let from_cg = unsafe { sched_ext::convert_cgroup(from as *mut _) };
+                let to_cg = unsafe { sched_ext::convert_cgroup(to as *mut _) };
+                #fn_name(&#prog_ident, &task, &from_cg, &to_cg);
             }
         }
     }
@@ -843,9 +863,11 @@ impl SchedExt {
         section_name: &str,
     ) -> TokenStream {
         quote! {
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[used]
             static #prog_ident: sched_ext = unsafe { sched_ext::new() };
 
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
@@ -854,7 +876,9 @@ impl SchedExt {
                 to: *mut (),
             ) {
                 let task = unsafe { sched_ext::convert_task(p as *mut _) };
-                #fn_name(&#prog_ident, &task, from, to);
+                let from_cg = unsafe { sched_ext::convert_cgroup(from as *mut _) };
+                let to_cg = unsafe { sched_ext::convert_cgroup(to as *mut _) };
+                #fn_name(&#prog_ident, &task, &from_cg, &to_cg);
             }
         }
     }
@@ -869,16 +893,19 @@ impl SchedExt {
         section_name: &str,
     ) -> TokenStream {
         quote! {
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[used]
             static #prog_ident: sched_ext = unsafe { sched_ext::new() };
 
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
                 cgrp: *mut (),
                 weight: u32,
             ) {
-                #fn_name(&#prog_ident, cgrp, weight);
+                let cgrp_ref = unsafe { sched_ext::convert_cgroup(cgrp as *mut _) };
+                #fn_name(&#prog_ident, &cgrp_ref, weight);
             }
         }
     }
@@ -894,9 +921,11 @@ impl SchedExt {
         section_name: &str,
     ) -> TokenStream {
         quote! {
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[used]
             static #prog_ident: sched_ext = unsafe { sched_ext::new() };
 
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
@@ -905,7 +934,8 @@ impl SchedExt {
                 quota_us: u64,
                 burst_us: u64,
             ) {
-                #fn_name(&#prog_ident, cgrp, period_us, quota_us, burst_us);
+                let cgrp_ref = unsafe { sched_ext::convert_cgroup(cgrp as *mut _) };
+                #fn_name(&#prog_ident, &cgrp_ref, period_us, quota_us, burst_us);
             }
         }
     }
@@ -920,16 +950,19 @@ impl SchedExt {
         section_name: &str,
     ) -> TokenStream {
         quote! {
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[used]
             static #prog_ident: sched_ext = unsafe { sched_ext::new() };
 
+            #[cfg(CONFIG_EXT_GROUP_SCHED = "y")]
             #[unsafe(export_name = #function_name)]
             #[unsafe(link_section = #section_name)]
             extern "C" fn #entry_name(
                 cgrp: *mut (),
                 idle: bool,
             ) {
-                #fn_name(&#prog_ident, cgrp, idle);
+                let cgrp_ref = unsafe { sched_ext::convert_cgroup(cgrp as *mut _) };
+                #fn_name(&#prog_ident, &cgrp_ref, idle);
             }
         }
     }

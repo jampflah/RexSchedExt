@@ -34,7 +34,7 @@ const SHARED_DSQ: u64 = 0;
 //       running dispatch; on a small VM the kernel's soft-lockup or
 //       RCU-stall detector will usually fire before scx's watchdog has
 //       a chance to react.
-const STALL_MODE: u32 = 0;
+const STALL_MODE: u32 = 1;
 // ---------------------------------------------------------------------------
 
 /// Pick a CPU for a waking task. If the default selection finds an idle

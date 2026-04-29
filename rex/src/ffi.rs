@@ -9,6 +9,13 @@ use crate::bindings::linux::kernel::{
 };
 use crate::bindings::uapi::linux::bpf::{bpf_perf_event_value, bpf_spin_lock};
 use crate::panic::{CleanupEntry, ENTRIES_SIZE};
+#[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+use crate::sched_ext::{
+    bpf_iter_scx_dsq, cpumask, rq, scx_event_stats, ScxBpfDsqInsertVtimeArgs,
+    ScxBpfSelectCpuAndArgs,
+};
+#[cfg(all(CONFIG_SCHED_CLASS_EXT = "y", CONFIG_CGROUP_SCHED = "y"))]
+use crate::sched_ext::cgroup;
 
 // Functions
 unsafe extern "C" {
@@ -327,6 +334,267 @@ unsafe extern "C" {
     /// u32 scx_bpf_nr_cpu_ids(void)
     #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
     pub(crate) fn scx_bpf_nr_cpu_ids() -> u32;
+
+    // ----- BPF DSQ iterator (ext.c:6780/6822/6868) -----
+
+    /// int bpf_iter_scx_dsq_new(struct bpf_iter_scx_dsq *it, u64 dsq_id, u64 flags)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn bpf_iter_scx_dsq_new(
+        it: *mut bpf_iter_scx_dsq,
+        dsq_id: u64,
+        flags: u64,
+    ) -> i32;
+
+    /// struct task_struct *bpf_iter_scx_dsq_next(struct bpf_iter_scx_dsq *it)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn bpf_iter_scx_dsq_next(
+        it: *mut bpf_iter_scx_dsq,
+    ) -> *mut task_struct;
+
+    /// void bpf_iter_scx_dsq_destroy(struct bpf_iter_scx_dsq *it)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn bpf_iter_scx_dsq_destroy(it: *mut bpf_iter_scx_dsq);
+
+    // ----- Underscored arg-wrapped variants (ext.c:6115, ext_idle.c:1030) -----
+
+    /// bool __scx_bpf_dsq_insert_vtime(struct task_struct *p,
+    ///                                 struct scx_bpf_dsq_insert_vtime_args *args)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn __scx_bpf_dsq_insert_vtime(
+        p: *mut task_struct,
+        args: *mut ScxBpfDsqInsertVtimeArgs,
+    ) -> bool;
+
+    /// s32 __scx_bpf_select_cpu_and(struct task_struct *p,
+    ///                              const struct cpumask *cpus_allowed,
+    ///                              struct scx_bpf_select_cpu_and_args *args)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn __scx_bpf_select_cpu_and(
+        p: *mut task_struct,
+        cpus_allowed: *const cpumask,
+        args: *mut ScxBpfSelectCpuAndArgs,
+    ) -> i32;
+
+    // ----- v2 entry points -----
+
+    /// bool scx_bpf_dsq_insert___v2(struct task_struct *p, u64 dsq_id,
+    ///                              u64 slice, u64 enq_flags) (ext.c:6026)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_dsq_insert___v2(
+        p: *mut task_struct,
+        dsq_id: u64,
+        slice: u64,
+        enq_flags: u64,
+    ) -> bool;
+
+    /// void scx_bpf_reenqueue_local___v2(void) (ext.c:7079)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_reenqueue_local___v2();
+
+    // ----- DSQ move helpers (ext.c:6357/6376/6410/6435) -----
+
+    /// void scx_bpf_dsq_move_set_slice(struct bpf_iter_scx_dsq *it__iter, u64 slice)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_dsq_move_set_slice(
+        it: *mut bpf_iter_scx_dsq,
+        slice: u64,
+    );
+
+    /// void scx_bpf_dsq_move_set_vtime(struct bpf_iter_scx_dsq *it__iter, u64 vtime)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_dsq_move_set_vtime(
+        it: *mut bpf_iter_scx_dsq,
+        vtime: u64,
+    );
+
+    /// bool scx_bpf_dsq_move(struct bpf_iter_scx_dsq *it__iter,
+    ///                       struct task_struct *p, u64 dsq_id, u64 enq_flags)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_dsq_move(
+        it: *mut bpf_iter_scx_dsq,
+        p: *mut task_struct,
+        dsq_id: u64,
+        enq_flags: u64,
+    ) -> bool;
+
+    /// bool scx_bpf_dsq_move_vtime(struct bpf_iter_scx_dsq *it__iter,
+    ///                             struct task_struct *p, u64 dsq_id, u64 enq_flags)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_dsq_move_vtime(
+        it: *mut bpf_iter_scx_dsq,
+        p: *mut task_struct,
+        dsq_id: u64,
+        enq_flags: u64,
+    ) -> bool;
+
+    /// struct task_struct *scx_bpf_dsq_peek(u64 dsq_id) (ext.c:6896)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_dsq_peek(dsq_id: u64) -> *mut task_struct;
+
+    // ----- bstr helpers (ext.c:6977/7026) -----
+
+    /// void scx_bpf_exit_bstr(s64 exit_code, char *fmt,
+    ///                        unsigned long long *data, u32 data__sz)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_exit_bstr(
+        exit_code: i64,
+        fmt: *const u8,
+        data: *const u64,
+        data_sz: u32,
+    );
+
+    /// void scx_bpf_dump_bstr(char *fmt, unsigned long long *data, u32 data__sz)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_dump_bstr(
+        fmt: *const u8,
+        data: *const u64,
+        data_sz: u32,
+    );
+
+    // ----- CPU performance (ext.c:7098/7125/7152) -----
+
+    /// u32 scx_bpf_cpuperf_cap(s32 cpu)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_cpuperf_cap(cpu: i32) -> u32;
+
+    /// u32 scx_bpf_cpuperf_cur(s32 cpu)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_cpuperf_cur(cpu: i32) -> u32;
+
+    /// void scx_bpf_cpuperf_set(s32 cpu, u32 perf)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_cpuperf_set(cpu: i32, perf: u32);
+
+    // ----- Topology / cpumask getters (ext.c:7202/7220/7228/7237) -----
+
+    /// u32 scx_bpf_nr_node_ids(void)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_nr_node_ids() -> u32;
+
+    /// const struct cpumask *scx_bpf_get_possible_cpumask(void)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_get_possible_cpumask() -> *const cpumask;
+
+    /// const struct cpumask *scx_bpf_get_online_cpumask(void)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_get_online_cpumask() -> *const cpumask;
+
+    /// void scx_bpf_put_cpumask(const struct cpumask *cpumask)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_put_cpumask(mask: *const cpumask);
+
+    // ----- Task / runqueue queries (ext.c:7251/7269/7298/7324) -----
+
+    /// bool scx_bpf_task_running(const struct task_struct *p)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_task_running(p: *const task_struct) -> bool;
+
+    /// struct rq *scx_bpf_cpu_rq(s32 cpu)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_cpu_rq(cpu: i32) -> *mut rq;
+
+    /// struct rq *scx_bpf_locked_rq(void)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_locked_rq() -> *mut rq;
+
+    /// struct task_struct *scx_bpf_cpu_curr(s32 cpu)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_cpu_curr(cpu: i32) -> *mut task_struct;
+
+    // ----- cgroup (ext.c:7352) — also requires CONFIG_CGROUP_SCHED -----
+
+    /// struct cgroup *scx_bpf_task_cgroup(struct task_struct *p)
+    #[cfg(all(CONFIG_SCHED_CLASS_EXT = "y", CONFIG_CGROUP_SCHED = "y"))]
+    pub(crate) fn scx_bpf_task_cgroup(p: *mut task_struct) -> *mut cgroup;
+
+    // ----- Misc (ext.c:7403/7463) -----
+
+    /// u64 scx_bpf_now(void)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_now() -> u64;
+
+    /// void scx_bpf_events(struct scx_event_stats *events, size_t events__sz)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_events(
+        events: *mut scx_event_stats,
+        events_sz: usize,
+    );
+
+    // ----- Idle / NUMA (ext_idle.c) -----
+
+    /// int scx_bpf_cpu_node(s32 cpu) (ext_idle.c:950)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_cpu_node(cpu: i32) -> i32;
+
+    /// s32 scx_bpf_select_cpu_and(struct task_struct *p, s32 prev_cpu,
+    ///                            u64 wake_flags, const struct cpumask *cpus_allowed,
+    ///                            u64 flags) (ext_idle.c:1048)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_select_cpu_and(
+        p: *mut task_struct,
+        prev_cpu: i32,
+        wake_flags: u64,
+        cpus_allowed: *const cpumask,
+        flags: u64,
+    ) -> i32;
+
+    /// const struct cpumask *scx_bpf_get_idle_cpumask_node(int node) (ext_idle.c:1072)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_get_idle_cpumask_node(node: i32) -> *const cpumask;
+
+    /// const struct cpumask *scx_bpf_get_idle_cpumask(void) (ext_idle.c:1096)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_get_idle_cpumask() -> *const cpumask;
+
+    /// const struct cpumask *scx_bpf_get_idle_smtmask_node(int node) (ext_idle.c:1127)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_get_idle_smtmask_node(node: i32) -> *const cpumask;
+
+    /// const struct cpumask *scx_bpf_get_idle_smtmask(void) (ext_idle.c:1155)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_get_idle_smtmask() -> *const cpumask;
+
+    /// void scx_bpf_put_idle_cpumask(const struct cpumask *idle_mask) (ext_idle.c:1184)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_put_idle_cpumask(mask: *const cpumask);
+
+    /// bool scx_bpf_test_and_clear_cpu_idle(s32 cpu) (ext_idle.c:1204)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_test_and_clear_cpu_idle(cpu: i32) -> bool;
+
+    /// s32 scx_bpf_pick_idle_cpu_node(const struct cpumask *cpus_allowed,
+    ///                                int node, u64 flags) (ext_idle.c:1242)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_pick_idle_cpu_node(
+        cpus_allowed: *const cpumask,
+        node: i32,
+        flags: u64,
+    ) -> i32;
+
+    /// s32 scx_bpf_pick_idle_cpu(const struct cpumask *cpus_allowed,
+    ///                           u64 flags) (ext_idle.c:1282)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_pick_idle_cpu(
+        cpus_allowed: *const cpumask,
+        flags: u64,
+    ) -> i32;
+
+    /// s32 scx_bpf_pick_any_cpu_node(const struct cpumask *cpus_allowed,
+    ///                               int node, u64 flags) (ext_idle.c:1325)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_pick_any_cpu_node(
+        cpus_allowed: *const cpumask,
+        node: i32,
+        flags: u64,
+    ) -> i32;
+
+    /// s32 scx_bpf_pick_any_cpu(const struct cpumask *cpus_allowed,
+    ///                          u64 flags) (ext_idle.c:1372)
+    #[cfg(CONFIG_SCHED_CLASS_EXT = "y")]
+    pub(crate) fn scx_bpf_pick_any_cpu(
+        cpus_allowed: *const cpumask,
+        flags: u64,
+    ) -> i32;
 }
 
 // Global variables
